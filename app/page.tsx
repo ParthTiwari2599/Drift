@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { createOrJoinRoom } from "@/lib/firestore";
 import { db } from "@/lib/firebase";
 import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
+import { listenToRoomPresenceUsers } from "@/lib/presence";
 import { Hash, Plus, Users, Zap, LogOut, User } from "lucide-react";
 
 interface Room {
@@ -20,6 +21,8 @@ export default function Home() {
   const { user, loading, signInWithGoogle, signOut } = useAuth();
   const [roomName, setRoomName] = useState("");
   const [activeRooms, setActiveRooms] = useState<Room[]>([]);
+  const [roomUserCounts, setRoomUserCounts] = useState<{[roomId: string]: number}>({});
+  const [roomListeners, setRoomListeners] = useState<{[roomId: string]: () => void}>({});
 
   useEffect(() => {
     if (!user) return;
@@ -39,9 +42,39 @@ export default function Home() {
         return b.createdAt.toMillis() - a.createdAt.toMillis();
       });
       setActiveRooms(rooms);
+
+      // Set up user count listeners for each room
+      const newListeners: {[roomId: string]: () => void} = {};
+      
+      rooms.forEach(room => {
+        if (!roomListeners[room.id]) {
+          const userCountUnsubscribe = listenToRoomPresenceUsers(room.id, (users) => {
+            setRoomUserCounts(prev => ({
+              ...prev,
+              [room.id]: users.length
+            }));
+          });
+          newListeners[room.id] = userCountUnsubscribe;
+        } else {
+          newListeners[room.id] = roomListeners[room.id];
+        }
+      });
+
+      // Clean up old listeners for rooms that no longer exist
+      Object.keys(roomListeners).forEach(roomId => {
+        if (!rooms.find(room => room.id === roomId)) {
+          roomListeners[roomId]();
+        }
+      });
+
+      setRoomListeners(newListeners);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      // Clean up all room listeners
+      Object.values(roomListeners).forEach(unsubscribe => unsubscribe());
+    };
   }, [user]);
 
   const createRoom = async () => {
@@ -152,6 +185,12 @@ export default function Home() {
                     <Hash size={20} />
                   </div>
                   <h3 className="text-lg font-semibold tracking-tight">{room.topic}</h3>
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className={`w-2 h-2 rounded-full ${roomUserCounts[room.id] > 0 ? 'bg-green-500 animate-pulse' : 'bg-zinc-600'}`}></div>
+                    <p className="text-xs text-zinc-500">
+                      {roomUserCounts[room.id] || 0} active {roomUserCounts[room.id] === 1 ? 'user' : 'users'}
+                    </p>
+                  </div>
                   <p className="text-xs text-zinc-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">Join Room &rarr;</p>
                   <div className="absolute -right-8 -bottom-8 w-24 h-24 bg-white/5 blur-3xl rounded-full group-hover:bg-white/10 transition-colors"></div>
                 </button>

@@ -16,7 +16,8 @@ export const sendPrivateMessage = async (
   text: string,
   userId: string,
   type: "text" | "image" | "emoji" | "sticker" = "text",
-  deleteMode: "never" | "seen" | "24h" = "never"
+  deleteMode: "never" | "seen" | "24h" = "never",
+  replyTo?: any
 ) => {
   const now = Date.now();
   let expireAt: Timestamp | null = null;
@@ -33,6 +34,7 @@ export const sendPrivateMessage = async (
     deleteMode,
     seenBy: [],
     expireAt,
+    replyTo,
     createdAt: serverTimestamp(),
   });
 };

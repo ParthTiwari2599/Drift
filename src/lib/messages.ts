@@ -7,6 +7,10 @@ import {
   orderBy,
   onSnapshot,
   Timestamp,
+  doc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -16,7 +20,8 @@ export const sendMessageToRoom = async (
   text: string,
   userId: string,
   type: "text" | "image" | "emoji" | "sticker" = "text",
-  deleteMode?: "never" | "seen" | "24h" | "36h"
+  deleteMode?: "never" | "seen" | "24h" | "36h",
+  replyTo?: any
 ) => {
   if (!topic || !text || !userId) {
     throw new Error("sendMessageToRoom: Missing params");
@@ -32,6 +37,7 @@ export const sendMessageToRoom = async (
     type,
     deleteMode: deleteMode || "36h", // group default 36h
     expireAt,
+    replyTo,
     createdAt: serverTimestamp(),
   });
 };
@@ -57,5 +63,29 @@ export const listenToRoomMessages = (
       .filter((msg) => !msg.expireAt || msg.expireAt.toMillis() > now); // filter out expired
 
     callback(msgs);
+  });
+};
+
+// 🔥 Add reaction to message
+export const addReactionToMessage = async (
+  messageId: string,
+  emoji: string,
+  userId: string
+) => {
+  const messageRef = doc(db, "messages", messageId);
+  await updateDoc(messageRef, {
+    [`reactions.${emoji}`]: arrayUnion(userId)
+  });
+};
+
+// 🔥 Remove reaction from message
+export const removeReactionFromMessage = async (
+  messageId: string,
+  emoji: string,
+  userId: string
+) => {
+  const messageRef = doc(db, "messages", messageId);
+  await updateDoc(messageRef, {
+    [`reactions.${emoji}`]: arrayRemove(userId)
   });
 };

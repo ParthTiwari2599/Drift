@@ -5,9 +5,11 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { sendPrivateMessage, listenPrivateMessages } from "@/lib/privateMessages";
 import { updateUserDisplayName } from "@/lib/privateRooms";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { getUserData } from "@/lib/firestore";
+import { doc, getDoc, onSnapshot, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Send, ChevronLeft, ShieldCheck, Lock, Cpu, Zap, Settings } from "lucide-react";
+import { Send, ChevronLeft, ShieldCheck, Lock, Cpu, Zap, Settings, Smile, Trash2 } from "lucide-react";
+import EmojiPicker from 'emoji-picker-react';
 
 export default function PrivateRoomPage() {
     const { roomId } = useParams();
@@ -20,6 +22,8 @@ export default function PrivateRoomPage() {
     const [showSettings, setShowSettings] = useState(false);
     const [editingName, setEditingName] = useState<string | null>(null);
     const [tempName, setTempName] = useState("");
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [userNames, setUserNames] = useState<{[uid: string]: string}>({});
     const bottomRef = useRef<HTMLDivElement | null>(null);
 
     // LOGIC: Unchanged
@@ -37,6 +41,33 @@ export default function PrivateRoomPage() {
         return unsub;
     }, [roomId]);
 
+    // Load user display names from Firebase
+    useEffect(() => {
+        const loadUserNames = async () => {
+            if (!roomData?.userA || !roomData?.userB) return;
+            
+            const names: {[uid: string]: string} = {};
+            const userIds = [roomData.userA, roomData.userB];
+            
+            for (const userId of userIds) {
+                try {
+                    const userData = await getUserData(userId);
+                    if (userData?.customDisplayName) {
+                        names[userId] = userData.customDisplayName;
+                    }
+                } catch (error) {
+                    console.error("Error loading user data for", userId, error);
+                }
+            }
+            
+            setUserNames(names);
+        };
+        
+        if (roomData) {
+            loadUserNames();
+        }
+    }, [roomData]);
+
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
@@ -45,6 +76,21 @@ export default function PrivateRoomPage() {
         if (!input.trim() || !user || !roomId) return;
         await sendPrivateMessage(roomId as string, input, user.uid);
         setInput("");
+    };
+
+    const handleDeleteMessage = async (messageId: string) => {
+        if (!roomId) return;
+        try {
+            // Delete from messages collection (private messages are also stored in main messages collection)
+            await deleteDoc(doc(db, "messages", messageId));
+        } catch (error) {
+            console.error("Error deleting message:", error);
+        }
+    };
+
+    const handleEmojiClick = (emojiData: any) => {
+        setInput(prev => prev + emojiData.emoji);
+        setShowEmojiPicker(false);
     };
 
     if (loading) return (
@@ -179,7 +225,7 @@ export default function PrivateRoomPage() {
                 
                 {messages.map((msg, i) => {
                     const isMe = msg.userId === user?.uid;
-                    const displayName = roomData?.userNames?.[msg.userId] || (isMe ? 'You' : 'Partner');
+                    const displayName = userNames[msg.userId] || (isMe ? 'You' : `User ${msg.userId?.slice(-4)}`);
                     return (
                         <div key={msg.id || i} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
                             <div className={`max-w-[75%] md:max-w-[60%] group`}>
@@ -199,6 +245,15 @@ export default function PrivateRoomPage() {
                                     <span className="text-[8px] font-black uppercase tracking-tighter text-zinc-500">
                                         {msg.createdAt?.toDate ? new Date(msg.createdAt.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Verified'}
                                     </span>
+                                    {isMe && msg.id && (
+                                        <button
+                                            onClick={() => handleDeleteMessage(msg.id)}
+                                            className="text-zinc-500 hover:text-red-400 transition-colors p-1 hover:bg-red-500/10 rounded"
+                                            title="Delete message"
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -209,7 +264,7 @@ export default function PrivateRoomPage() {
 
             {/* Footer / Input Terminal */}
             <footer className="p-6 md:p-10 bg-gradient-to-t from-black to-transparent">
-                <div className="max-w-4xl mx-auto flex items-center gap-4 bg-zinc-900/40 border border-zinc-800/80 p-2.5 rounded-[2rem] focus-within:border-blue-600/50 transition-all backdrop-blur-xl group shadow-2xl">
+                <div className="max-w-4xl mx-auto relative flex items-center gap-4 bg-zinc-900/40 border border-zinc-800/80 p-2.5 rounded-[2rem] focus-within:border-blue-600/50 transition-all backdrop-blur-xl group shadow-2xl">
                     <input 
                         className="flex-1 bg-transparent px-6 py-3 outline-none text-sm placeholder:text-zinc-700 placeholder:uppercase placeholder:text-[10px] placeholder:tracking-[0.3em] font-bold text-white"
                         value={input}
@@ -218,6 +273,12 @@ export default function PrivateRoomPage() {
                         placeholder="Secure transmission..."
                     />
                     <button 
+                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                        className="text-zinc-400 hover:text-zinc-200 transition-colors p-2"
+                    >
+                        <Smile size={20} />
+                    </button>
+                    <button 
                         onClick={handleSend}
                         disabled={!input.trim()}
                         className="bg-white text-black h-12 w-12 flex items-center justify-center rounded-full hover:bg-blue-600 hover:text-white disabled:opacity-5 transition-all active:scale-95 shadow-xl group/btn"
@@ -225,6 +286,15 @@ export default function PrivateRoomPage() {
                         <Send size={18} className="group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
                     </button>
                 </div>
+                {showEmojiPicker && (
+                    <div className="absolute bottom-full right-0 mb-2 z-50">
+                        <EmojiPicker 
+                            onEmojiClick={handleEmojiClick}
+                            width={300}
+                            height={400}
+                        />
+                    </div>
+                )}
             </footer>
         </div>
     );
