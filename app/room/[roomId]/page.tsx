@@ -232,11 +232,31 @@ export default function RoomPage() {
         const replyData = replyingTo;
         setInput("");
         setReplyingTo(null);
-        
-        if (currentChat === "group") {
-            await sendMessageToRoom(roomId as string, msgText, user.uid, "text", "never", replyData);
-        } else {
-            await sendPrivateMessage(currentChat, msgText, user.uid, "text", "never", replyData);
+
+        try {
+            if (currentChat === "group") {
+                await sendMessageToRoom(roomId as string, msgText, user.uid, "text", "never", replyData);
+            } else {
+                await sendPrivateMessage(currentChat, msgText, user.uid, "text", "never", replyData);
+            }
+        } catch (error: any) {
+            console.error("Failed to send message:", error);
+
+            // Show user-friendly error message
+            const errorMessage = error.message?.includes("No internet connection")
+                ? "No internet connection. Your message will be sent when connection is restored."
+                : error.message?.includes("permission")
+                ? "You don't have permission to send messages in this room."
+                : "Failed to send message. Please try again.";
+
+            // You could add a toast notification here instead of alert
+            alert(errorMessage);
+
+            // Restore the input if it was a network error
+            if (error.message?.includes("No internet connection")) {
+                setInput(msgText);
+                setReplyingTo(replyData);
+            }
         }
     };
 
@@ -382,7 +402,7 @@ export default function RoomPage() {
         <>
             <div className={`flex h-screen ${theme === 'dark' ? 'bg-[#050505] text-zinc-300' : 'bg-gray-100 text-gray-800'} overflow-hidden transition-colors duration-300 ${isMobileMenuOpen ? 'overflow-hidden' : ''}`}>
             {/* SIDEBAR - Ultra Modern Glassmorphism */}
-            <aside className={`w-80 ${theme === 'dark' ? 'bg-black/40 border-zinc-800/50' : 'bg-white/80 border-gray-300/50'} flex flex-col z-30 backdrop-blur-2xl`}>
+            <aside className={`hidden sm:flex w-80 ${theme === 'dark' ? 'bg-black/40 border-zinc-800/50' : 'bg-white/80 border-gray-300/50'} flex-col z-30 backdrop-blur-2xl`}>
                 <div className="p-8 border-b border-zinc-800/50 relative overflow-hidden group">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-600 to-transparent opacity-50" />
                     <div className="flex items-center justify-between mb-6">
@@ -537,6 +557,21 @@ export default function RoomPage() {
                             );
                         })}
                     </section>
+                </div>
+
+                {/* Settings Section */}
+                <div className="px-4 py-6 border-t border-zinc-800/50">
+                    <button 
+                        onClick={() => {
+                            setSettingsTempDisplayName(userNames[user.uid] || user.displayName || "");
+                            setSelectedAvatar(userAvatars[user.uid] || generateRandomAvatar(user.uid));
+                            setShowSettingsModal(true);
+                        }}
+                        className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                    >
+                        <Settings size={16} className="text-zinc-400" />
+                        <span className="text-sm font-medium">Settings</span>
+                    </button>
                 </div>
             </aside>
 

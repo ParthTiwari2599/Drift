@@ -160,7 +160,97 @@ export default function Home() {
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-blue-500 font-mono italic text-sm sm:text-base">INITIALIZING_DRIFT...</div>;
 
   return (
-    <main className={`min-h-screen bg-[#050505] text-white selection:bg-blue-500/30 ${isMobileMenuOpen ? 'overflow-hidden' : ''}`}>
+    <div className={`min-h-screen bg-[#050505] text-white selection:bg-blue-500/30 ${isMobileMenuOpen ? 'overflow-hidden' : ''}`}>
+      
+      {/* Desktop Sidebar */}
+      <aside className="hidden sm:flex w-80 bg-black/40 border-r border-white/10 flex-col backdrop-blur-2xl fixed left-0 top-0 h-full z-30">
+        <div className="p-8 border-b border-white/10">
+          <div className="flex items-center gap-2 mb-6">
+            <Zap className="text-blue-500" fill="currentColor" size={20} />
+            <span className="text-lg font-black italic tracking-tighter">DRIFT.</span>
+          </div>
+          
+          {/* User Status */}
+          {user ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
+                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                  <User size={16} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">{user.displayName || 'Anonymous'}</p>
+                  <p className="text-xs text-zinc-500">Connected</p>
+                </div>
+              </div>
+              <button 
+                onClick={signOut}
+                className="w-full flex items-center gap-3 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition-all"
+              >
+                <LogOut size={16} className="text-red-400" />
+                <span className="text-sm font-medium text-red-400">Disconnect</span>
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={signInWithGoogle}
+              className="w-full flex items-center gap-3 p-4 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all"
+            >
+              <Shield size={16} />
+              <span className="text-sm font-medium">Secure Auth</span>
+            </button>
+          )}
+        </div>
+
+        {/* Navigation Links */}
+        <div className="flex-1 p-8 space-y-2">
+          <div className="text-xs font-black uppercase tracking-widest text-zinc-600 mb-4">Navigation</div>
+          
+          <button className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left">
+            <House size={16} className="text-blue-400" />
+            <span className="text-sm font-medium">Home</span>
+          </button>
+
+          {user && (
+            <>
+              <button 
+                onClick={() => {
+                  document.getElementById('active-rooms')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+              >
+                <MessageCircle size={16} className="text-green-400" />
+                <span className="text-sm font-medium">Active Rooms ({activeRooms.length})</span>
+              </button>
+
+              <button 
+                onClick={() => {
+                  document.getElementById('create-room')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+              >
+                <Plus size={16} className="text-purple-400" />
+                <span className="text-sm font-medium">Create Room</span>
+              </button>
+            </>
+          )}
+
+          <div className="pt-4 border-t border-zinc-800/50 mt-8">
+            <button 
+              onClick={() => {
+                setTempDisplayName(user?.displayName || "");
+                setSelectedAvatar("");
+                setShowSettingsModal(true);
+              }}
+              className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+            >
+              <Settings size={16} className="text-zinc-400" />
+              <span className="text-sm font-medium">Settings</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <main className="sm:ml-80 min-h-screen">
       
       {/* --- HERO SECTION --- */}
       <div className="relative border-b border-white/5">
@@ -613,5 +703,6 @@ export default function Home() {
       </footer>
 
     </main>
+    </div>
   );
 }

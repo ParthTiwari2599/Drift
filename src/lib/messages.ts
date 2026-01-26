@@ -14,7 +14,46 @@ import {
   getDocs,
   deleteDoc,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, getConnectionStatus } from "@/lib/firebase";
+
+// Utility function for retrying Firebase operations
+const retryFirebaseOperation = async <T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  delay: number = 1000
+): Promise<T> => {
+  let lastError: Error;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Check if we're online before attempting
+      if (!getConnectionStatus() && attempt === 1) {
+        throw new Error("No internet connection. Please check your network and try again.");
+      }
+
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+
+      // Don't retry for certain errors
+      if (error.code === 'permission-denied' ||
+          error.code === 'not-found' ||
+          error.message?.includes('permission')) {
+        throw error;
+      }
+
+      // If this is the last attempt, throw the error
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, delay * attempt));
+    }
+  }
+
+  throw lastError!;
+};
 
 // 🔥 Send message
 export const sendMessageToRoom = async (
@@ -29,25 +68,28 @@ export const sendMessageToRoom = async (
     throw new Error("sendMessageToRoom: Missing params");
   }
 
-  const now = Date.now();
-  const expireAt = deleteMode === "2h" ? Timestamp.fromMillis(now + 2 * 60 * 60 * 1000) : null;
+  return retryFirebaseOperation(async () => {
+    const now = Date.now();
+    const expireAt = deleteMode === "2h" ? Timestamp.fromMillis(now + 2 * 60 * 60 * 1000) : null;
 
-  await addDoc(collection(db, "messages"), {
-    roomId: topic, // topic = roomId
-    text,
-    userId,
-    type,
-    deleteMode: deleteMode || "2h", // group default 2h
-    expireAt,
-    replyTo,
-    createdAt: serverTimestamp(),
+    await addDoc(collection(db, "messages"), {
+      roomId: topic, // topic = roomId
+      text,
+      userId,
+      type,
+      deleteMode: deleteMode || "2h", // group default 2h
+      expireAt,
+      replyTo,
+      createdAt: serverTimestamp(),
+    });
   });
 };
 
 // 🔥 Listen messages
 export const listenToRoomMessages = (
   topic: string,
-  callback: (messages: any[]) => void
+  callback: (messages: any[]) => void,
+  onError?: (error: Error) => void
 ) => {
   const q = query(
     collection(db, "messages"),
@@ -55,17 +97,25 @@ export const listenToRoomMessages = (
     orderBy("createdAt", "asc")
   );
 
-  return onSnapshot(q, (snap) => {
-    const now = Date.now();
-    const msgs = snap.docs
-      .map((d) => ({
-        id: d.id,
-        ...d.data(),
-      } as any))
-      .filter((msg) => !msg.expireAt || msg.expireAt.toMillis() > now); // filter out expired
+  return onSnapshot(q,
+    (snap) => {
+      const now = Date.now();
+      const msgs = snap.docs
+        .map((d) => ({
+          id: d.id,
+          ...d.data(),
+        } as any))
+        .filter((msg) => !msg.expireAt || msg.expireAt.toMillis() > now); // filter out expired
 
-    callback(msgs);
-  });
+      callback(msgs);
+    },
+    (error) => {
+      console.error("Error listening to room messages:", error);
+      if (onError) {
+        onError(error as Error);
+      }
+    }
+  );
 };
 
 // 🔥 Add reaction to message
@@ -74,9 +124,11 @@ export const addReactionToMessage = async (
   emoji: string,
   userId: string
 ) => {
-  const messageRef = doc(db, "messages", messageId);
-  await updateDoc(messageRef, {
-    [`reactions.${emoji}`]: arrayUnion(userId)
+  return retryFirebaseOperation(async () => {
+    const messageRef = doc(db, "messages", messageId);
+    await updateDoc(messageRef, {
+      [`reactions.${emoji}`]: arrayUnion(userId)
+    });
   });
 };
 
@@ -86,15 +138,17 @@ export const removeReactionFromMessage = async (
   emoji: string,
   userId: string
 ) => {
-  const messageRef = doc(db, "messages", messageId);
-  await updateDoc(messageRef, {
-    [`reactions.${emoji}`]: arrayRemove(userId)
+  return retryFirebaseOperation(async () => {
+    const messageRef = doc(db, "messages", messageId);
+    await updateDoc(messageRef, {
+      [`reactions.${emoji}`]: arrayRemove(userId)
+    });
   });
 };
 
 // 🔥 Cleanup expired messages (call this periodically)
 export const cleanupExpiredMessages = async () => {
-  try {
+  return retryFirebaseOperation(async () => {
     const now = Timestamp.now();
     const q = query(
       collection(db, "messages"),
@@ -106,7 +160,5 @@ export const cleanupExpiredMessages = async () => {
 
     await Promise.all(deletePromises);
     console.log(`Cleaned up ${deletePromises.length} expired messages`);
-  } catch (error) {
-    console.error("Error cleaning up expired messages:", error);
-  }
+  });
 };

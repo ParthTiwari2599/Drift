@@ -78,8 +78,29 @@ export default function PrivateRoomPage() {
 
     const handleSend = async () => {
         if (!input.trim() || !user || !roomId) return;
-        await sendPrivateMessage(roomId as string, input, user.uid);
+
+        const msgText = input;
         setInput("");
+
+        try {
+            await sendPrivateMessage(roomId as string, msgText, user.uid);
+        } catch (error: any) {
+            console.error("Failed to send private message:", error);
+
+            // Show user-friendly error message
+            const errorMessage = error.message?.includes("No internet connection")
+                ? "No internet connection. Your message will be sent when connection is restored."
+                : error.message?.includes("permission")
+                ? "You don't have permission to send messages in this chat."
+                : "Failed to send message. Please try again.";
+
+            alert(errorMessage);
+
+            // Restore the input if it was a network error
+            if (error.message?.includes("No internet connection")) {
+                setInput(msgText);
+            }
+        }
     };
 
     const handleDeleteMessage = async (messageId: string) => {
@@ -127,7 +148,80 @@ export default function PrivateRoomPage() {
 
     return (
         <>
-            <div className={`h-screen bg-[#050505] text-zinc-300 font-sans flex flex-col overflow-hidden ${isMobileMenuOpen ? 'overflow-hidden' : ''}`}>
+            {/* Desktop Sidebar */}
+            <aside className="hidden sm:flex w-80 bg-black/40 border-r border-zinc-800/50 flex-col backdrop-blur-2xl">
+                <div className="p-8 border-b border-zinc-800/50">
+                    <div className="flex items-center justify-between mb-6">
+                        <button 
+                            onClick={() => router.back()} 
+                            className="flex items-center text-[9px] text-zinc-600 hover:text-white transition-all uppercase font-black tracking-[0.2em]"
+                        >
+                            <ChevronLeft size={14} className="mr-1" /> Exit Protocol
+                        </button>
+                    </div>
+                    
+                    <div className="flex flex-col">
+                        <div className="flex items-center gap-2 mb-2">
+                            <ShieldCheck size={16} className="text-blue-500" />
+                            <h1 className="text-sm font-black text-white uppercase tracking-wider">
+                                Secure_Node_{roomId?.slice(-4)}
+                            </h1>
+                        </div>
+                        <p className="text-[9px] text-blue-600 font-bold uppercase tracking-widest">
+                            Point-to-Point Encryption Active
+                        </p>
+                    </div>
+                </div>
+
+                {/* User Status */}
+                <div className="p-8">
+                    {user ? (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
+                                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                                    <User size={16} />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-white">{user.displayName || 'Anonymous'}</p>
+                                    <p className="text-xs text-zinc-500">Private Chat</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => router.back()}
+                                className="w-full flex items-center gap-3 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition-all"
+                            >
+                                <LogOut size={16} className="text-red-400" />
+                                <span className="text-sm font-medium text-red-400">Exit Private Chat</span>
+                            </button>
+                        </div>
+                    ) : (
+                        <button 
+                            onClick={() => router.push("/")}
+                            className="w-full flex items-center gap-3 p-4 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all"
+                        >
+                            <Shield size={16} />
+                            <span className="text-sm font-medium">Secure Auth</span>
+                        </button>
+                    )}
+                </div>
+
+                {/* Settings Section */}
+                <div className="mt-auto p-4 border-t border-zinc-800/50">
+                    <button 
+                        onClick={() => {
+                            setTempDisplayName(userNames[user?.uid || ""] || user?.displayName || "");
+                            setSelectedAvatar(""); // Will be loaded from user data
+                            setShowSettingsModal(true);
+                        }}
+                        className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                    >
+                        <Settings size={16} className="text-zinc-400" />
+                        <span className="text-sm font-medium">Settings</span>
+                    </button>
+                </div>
+            </aside>
+
+            <div className={`flex-1 h-screen bg-[#050505] text-zinc-300 font-sans flex flex-col overflow-hidden ${isMobileMenuOpen ? 'overflow-hidden' : ''}`}>
             {/* Header - Glassmorphism */}
             <header className="h-20 border-b border-zinc-900 flex items-center px-4 sm:px-6 md:px-10 justify-between bg-black/40 backdrop-blur-xl z-20">
                 <div className="flex items-center gap-4 sm:gap-6">

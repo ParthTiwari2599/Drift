@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getFirestore, connectFirestoreEmulator, enableNetwork, disableNetwork } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
@@ -11,9 +11,56 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Connection status tracking
+let isOnline = true;
+let connectionCheckInterval: NodeJS.Timeout | null = null;
+
+export const getConnectionStatus = () => isOnline;
+
+export const setConnectionStatus = (status: boolean) => {
+  isOnline = status;
+};
+
+// Monitor connection status
+export const monitorConnection = (callback?: (status: boolean) => void) => {
+  if (typeof window !== 'undefined') {
+    const handleOnline = () => {
+      setConnectionStatus(true);
+      // Try to re-enable network when coming back online
+      enableNetwork(db).catch(console.warn);
+      callback?.(true);
+    };
+
+    const handleOffline = () => {
+      setConnectionStatus(false);
+      // Disable network when offline
+      disableNetwork(db).catch(console.warn);
+      callback?.(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Return cleanup function
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }
+
+  return () => {}; // No-op cleanup for server-side
+};
+
+// Initialize connection monitoring
+if (typeof window !== 'undefined') {
+  monitorConnection();
+  setConnectionStatus(navigator.onLine);
+}
 
 // Avatar utility functions
 export const generateRandomAvatar = (seed?: string) => {
