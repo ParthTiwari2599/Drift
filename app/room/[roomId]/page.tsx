@@ -22,9 +22,10 @@ import {
 } from "@/lib/presence";
 import { listenMyPrivateRooms } from "@/lib/privateRooms";
 import { sendPrivateMessage, listenPrivateMessages } from "@/lib/privateMessages";
-import { db } from "@/lib/firebase";
+import { deleteRoom } from "@/lib/firestore";
+import { db, generateRandomAvatar, generateAvatarFromName } from "@/lib/firebase";
 import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
-import { Send, Users, ChevronLeft, ShieldCheck, UserCheck, Clock, Hash, Zap, Radio, Smile, Trash2, Search, X, Sun, Moon, Reply, Shield } from "lucide-react";
+import { Send, Users, ChevronLeft, ShieldCheck, UserCheck, Clock, Hash, Zap, Radio, Smile, Trash2, Search, X, Sun, Moon, Reply, Shield, Lock, Trash } from "lucide-react";
 import EmojiPicker from 'emoji-picker-react';
 
 export default function RoomPage() {
@@ -55,6 +56,7 @@ export default function RoomPage() {
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [replyingTo, setReplyingTo] = useState<any>(null);
     const [encryptionEnabled, setEncryptionEnabled] = useState(false);
+    const [userAvatars, setUserAvatars] = useState<{[uid: string]: string}>({});
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -106,6 +108,8 @@ export default function RoomPage() {
     useEffect(() => {
         const loadUserNames = async () => {
             const names: {[uid: string]: string} = {};
+            const avatars: {[uid: string]: string} = {};
+            
             for (const activeUser of activeUsers) {
                 if (activeUser.userId && activeUser.userId !== user?.uid) {
                     try {
@@ -116,13 +120,38 @@ export default function RoomPage() {
                             // Generate a friendly name if no custom name is set
                             names[activeUser.userId] = `User ${activeUser.userId.slice(-4)}`;
                         }
+                        
+                        // Generate avatar
+                        if (userData?.customAvatar) {
+                            avatars[activeUser.userId] = userData.customAvatar;
+                        } else {
+                            // Generate random avatar based on user ID for consistency
+                            avatars[activeUser.userId] = generateRandomAvatar(activeUser.userId);
+                        }
                     } catch (error) {
-                        console.error("Error loading user data for", activeUser.userId, error);
+                        // Removed console.error for security
                         names[activeUser.userId] = `User ${activeUser.userId.slice(-4)}`;
+                        avatars[activeUser.userId] = generateRandomAvatar(activeUser.userId);
                     }
                 }
             }
+            
+            // Also set avatar for current user
+            if (user?.uid) {
+                try {
+                    const userData = await getUserData(user.uid);
+                    if (userData?.customAvatar) {
+                        avatars[user.uid] = userData.customAvatar;
+                    } else {
+                        avatars[user.uid] = generateRandomAvatar(user.uid);
+                    }
+                } catch (error) {
+                    avatars[user.uid] = generateRandomAvatar(user.uid);
+                }
+            }
+            
             setUserNames(prev => ({ ...prev, ...names }));
+            setUserAvatars(prev => ({ ...prev, ...avatars }));
         };
         if (activeUsers.length > 0) {
             loadUserNames();
@@ -168,7 +197,7 @@ export default function RoomPage() {
                         statuses[activeUser.userId] = 'none';
                     }
                 } catch (error) {
-                    console.error("Error loading connection status for", activeUser.userId, error);
+                    // Removed console.error for security
                     statuses[activeUser.userId] = 'none';
                 }
             }
@@ -210,6 +239,21 @@ export default function RoomPage() {
             }
         } catch (error) {
             console.error("Error deleting message:", error);
+        }
+    };
+
+    const handleDeleteRoom = async () => {
+        if (!user || !roomData) return;
+
+        const confirmDelete = window.confirm(`Are you sure you want to delete the room "${decodedTopic}"? This action cannot be undone and all messages will be lost.`);
+
+        if (!confirmDelete) return;
+
+        try {
+            await deleteRoom(roomId as string, user.uid);
+            router.push("/");
+        } catch (error) {
+            alert("Failed to delete room: " + (error as Error).message);
         }
     };
 
@@ -291,12 +335,24 @@ export default function RoomPage() {
             <aside className={`w-80 ${theme === 'dark' ? 'bg-black/40 border-zinc-800/50' : 'bg-white/80 border-gray-300/50'} flex flex-col z-30 backdrop-blur-2xl`}>
                 <div className="p-8 border-b border-zinc-800/50 relative overflow-hidden group">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-600 to-transparent opacity-50" />
-                    <button onClick={() => router.push("/")} className="flex items-center text-[9px] text-zinc-600 hover:text-white transition-all mb-6 uppercase font-black tracking-[0.2em]">
-                        <ChevronLeft size={14} className="mr-1" /> Exit Protocol
-                    </button>
+                    <div className="flex items-center justify-between mb-6">
+                        <button onClick={() => router.push("/")} className="flex items-center text-[9px] text-zinc-600 hover:text-white transition-all uppercase font-black tracking-[0.2em]">
+                            <ChevronLeft size={14} className="mr-1" /> Exit Protocol
+                        </button>
+                        {roomData?.createdBy === user?.uid && (
+                            <button
+                                onClick={handleDeleteRoom}
+                                className="flex items-center text-[9px] text-red-500 hover:text-red-400 transition-all uppercase font-black tracking-[0.2em] hover:bg-red-500/10 px-2 py-1 rounded"
+                                title="Delete Room"
+                            >
+                                <Trash size={12} className="mr-1" /> Delete
+                            </button>
+                        )}
+                    </div>
                     <h1 className="text-2xl font-black text-white truncate tracking-tighter flex items-center gap-2">
                         <Hash className="text-blue-600" size={20} />
                         {decodedTopic.toUpperCase()}
+                        {roomData?.isLocked && <Lock size={16} className="text-yellow-500" />}
                     </h1>
                     <div className="flex items-center gap-2 mt-3 bg-blue-600/5 w-fit px-3 py-1 rounded-full border border-blue-500/10">
                         <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_#3b82f6]" />
@@ -551,6 +607,11 @@ export default function RoomPage() {
                                 <div className={`group relative max-w-[60%] transition-all`}>
                                     {!isMe && (
                                         <div className="flex items-center gap-2 mb-2 ml-1">
+                                            <img 
+                                                src={userAvatars[msg.userId] || generateRandomAvatar(msg.userId)} 
+                                                alt="Avatar" 
+                                                className="w-6 h-6 rounded-full border border-zinc-600"
+                                            />
                                             <span className="text-[9px] font-black text-zinc-600 uppercase tracking-tighter">
                                                 {senderName}
                                             </span>
@@ -608,6 +669,20 @@ export default function RoomPage() {
                                             </button>
                                         )}
                                     </div>
+                                    
+                                    {/* Current User Avatar */}
+                                    {isMe && (
+                                        <div className="flex items-center justify-end gap-2 mt-2 mr-1">
+                                            <span className="text-[9px] font-black text-zinc-600 uppercase tracking-tighter">
+                                                You
+                                            </span>
+                                            <img 
+                                                src={userAvatars[user.uid] || generateRandomAvatar(user.uid)} 
+                                                alt="Your Avatar" 
+                                                className="w-6 h-6 rounded-full border border-zinc-600"
+                                            />
+                                        </div>
+                                    )}
                                     
                                     {/* Reactions */}
                                     {msg.reactions && Object.keys(msg.reactions).length > 0 && (
