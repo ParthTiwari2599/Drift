@@ -5,10 +5,10 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { sendPrivateMessage, listenPrivateMessages } from "@/lib/privateMessages";
 import { updateUserDisplayName } from "@/lib/privateRooms";
-import { getUserData } from "@/lib/firestore";
+import { getUserData, updateUserData } from "@/lib/firestore";
 import { doc, getDoc, onSnapshot, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Send, ChevronLeft, ShieldCheck, Lock, Cpu, Zap, Settings, Smile, Trash2 } from "lucide-react";
+import { Send, ChevronLeft, ShieldCheck, Lock, Cpu, Zap, Settings, Smile, Trash2, Menu, X, House, MessageCircle, User, LogOut, Shield } from "lucide-react";
 import EmojiPicker from 'emoji-picker-react';
 
 export default function PrivateRoomPage() {
@@ -24,6 +24,10 @@ export default function PrivateRoomPage() {
     const [tempName, setTempName] = useState("");
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [userNames, setUserNames] = useState<{[uid: string]: string}>({});
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [tempDisplayName, setTempDisplayName] = useState("");
+    const [selectedAvatar, setSelectedAvatar] = useState("");
     const bottomRef = useRef<HTMLDivElement | null>(null);
 
     // LOGIC: Unchanged
@@ -93,6 +97,27 @@ export default function PrivateRoomPage() {
         setShowEmojiPicker(false);
     };
 
+    const handleSaveSettings = async () => {
+        if (!user) return;
+        
+        try {
+            await updateUserData(user.uid, {
+                customDisplayName: tempDisplayName.trim() || undefined,
+                customAvatar: selectedAvatar || undefined
+            });
+            
+            // Update local state
+            setUserNames(prev => ({
+                ...prev,
+                [user.uid]: tempDisplayName.trim() || `User ${user.uid.slice(-4)}`
+            }));
+            
+            setShowSettingsModal(false);
+        } catch (error) {
+            console.error("Failed to update settings:", error);
+        }
+    };
+
     if (loading) return (
         <div className="h-screen bg-[#050505] flex flex-col items-center justify-center space-y-4">
             <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -101,10 +126,19 @@ export default function PrivateRoomPage() {
     );
 
     return (
-        <div className="h-screen bg-[#050505] text-zinc-300 font-sans flex flex-col overflow-hidden">
+        <>
+            <div className={`h-screen bg-[#050505] text-zinc-300 font-sans flex flex-col overflow-hidden ${isMobileMenuOpen ? 'overflow-hidden' : ''}`}>
             {/* Header - Glassmorphism */}
-            <header className="h-20 border-b border-zinc-900 flex items-center px-6 md:px-10 justify-between bg-black/40 backdrop-blur-xl z-20">
-                <div className="flex items-center gap-6">
+            <header className="h-20 border-b border-zinc-900 flex items-center px-4 sm:px-6 md:px-10 justify-between bg-black/40 backdrop-blur-xl z-20">
+                <div className="flex items-center gap-4 sm:gap-6">
+                    {/* Mobile Hamburger Menu */}
+                    <button 
+                        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                        className="sm:hidden p-2 hover:bg-zinc-900 rounded-lg transition-all"
+                    >
+                        {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+                    </button>
+                    
                     <button 
                         onClick={() => router.back()} 
                         className="p-2 hover:bg-zinc-900 rounded-full transition-all group"
@@ -138,6 +172,126 @@ export default function PrivateRoomPage() {
                     </div>
                 </div>
             </header>
+
+            {/* Mobile Sidebar */}
+            <div className={`fixed inset-0 z-50 sm:hidden ${isMobileMenuOpen ? 'block' : 'hidden'}`}>
+                {/* Backdrop */}
+                <div 
+                    className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
+                
+                {/* Sidebar */}
+                <div className={`absolute right-0 top-0 h-full w-80 bg-[#050505] border-l border-white/10 transform transition-transform duration-300 ease-in-out ${
+                    isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
+                }`}>
+                    <div className="flex flex-col h-full p-6">
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-8">
+                            <div className="flex items-center gap-2">
+                                <Zap className="text-blue-500" fill="currentColor" size={20} />
+                                <span className="text-lg font-black italic tracking-tighter">DRIFT.</span>
+                            </div>
+                            <button 
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className="p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* User Status */}
+                        <div className="mb-8">
+                            {user ? (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
+                                        <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                                            <User size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-white">{user.displayName || 'Anonymous'}</p>
+                                            <p className="text-xs text-zinc-500">Private Chat</p>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            setIsMobileMenuOpen(false);
+                                            router.back();
+                                        }}
+                                        className="w-full flex items-center gap-3 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition-all"
+                                    >
+                                        <LogOut size={16} className="text-red-400" />
+                                        <span className="text-sm font-medium text-red-400">Exit Private Chat</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            setIsMobileMenuOpen(false);
+                                            setTempDisplayName(userNames[user.uid] || user.displayName || "");
+                                            setSelectedAvatar(""); // Will be loaded from user data
+                                            setShowSettingsModal(true);
+                                        }}
+                                        className="w-full flex items-center gap-3 p-3 bg-zinc-900/50 hover:bg-zinc-800 border border-zinc-700/50 rounded-xl transition-all"
+                                    >
+                                        <Settings size={16} className="text-zinc-400" />
+                                        <span className="text-sm font-medium text-zinc-300">Settings</span>
+                                    </button>
+                                </div>
+                            ) : (
+                                <button 
+                                    onClick={() => router.push("/")}
+                                    className="w-full flex items-center gap-3 p-4 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all"
+                                >
+                                    <Shield size={16} />
+                                    <span className="text-sm font-medium">Secure Auth</span>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Navigation Links */}
+                        <div className="flex-1 space-y-2">
+                            <div className="text-xs font-black uppercase tracking-widest text-zinc-600 mb-4">Navigation</div>
+                            
+                            <button 
+                                onClick={() => {
+                                    setIsMobileMenuOpen(false);
+                                    router.push("/");
+                                }}
+                                className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                            >
+                                <House size={16} className="text-blue-400" />
+                                <span className="text-sm font-medium">Home</span>
+                            </button>
+
+                            <button 
+                                onClick={() => {
+                                    setIsMobileMenuOpen(false);
+                                    // Go back to room selection or main room
+                                    router.push("/");
+                                }}
+                                className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                            >
+                                <MessageCircle size={16} className="text-green-400" />
+                                <span className="text-sm font-medium">Public Rooms</span>
+                            </button>
+
+                            <button className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left">
+                                <Settings size={16} className="text-zinc-400" />
+                                <span className="text-sm font-medium">Settings</span>
+                            </button>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="border-t border-white/10 pt-6 space-y-3">
+                            <div className="text-center space-y-2">
+                                <div className="text-[8px] font-black uppercase tracking-[0.4em] text-zinc-700">DEVELOPED BY</div>
+                                <div className="text-sm font-bold text-blue-400">Parth Tiwari</div>
+                                <div className="text-[7px] text-zinc-500 font-medium">GitHub: @parthtiwari2599</div>
+                                <div className="text-[7px] text-zinc-500 font-medium">parthtiwari2599@gmail.com</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {/* Settings Panel */}
             {showSettings && roomData && (
@@ -308,5 +462,99 @@ export default function PrivateRoomPage() {
                 )}
             </footer>
         </div>
+
+        {/* Settings Modal */}
+        {showSettingsModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setShowSettingsModal(false)}
+            />
+            
+            {/* Modal */}
+            <div className="relative bg-[#050505] border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-black text-white">Settings</h3>
+                <button 
+                  onClick={() => setShowSettingsModal(false)}
+                  className="p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Display Name */}
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Display Name</label>
+                  <input
+                    type="text"
+                    value={tempDisplayName}
+                    onChange={(e) => setTempDisplayName(e.target.value)}
+                    className="w-full bg-zinc-900/50 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                    placeholder="Enter your display name"
+                    maxLength={30}
+                  />
+                </div>
+
+                {/* Avatar Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-3">Choose Avatar</label>
+                  <div className="grid grid-cols-4 gap-3">
+                    {[
+                      '👤', '🎭', '🤖', '👨‍💻', '👩‍💻', '🦊', '🐺', '🐱', 
+                      '🦁', '🐼', '🐨', '🦄', '🐉', '🌟', '⚡', '🔥'
+                    ].map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => setSelectedAvatar(emoji)}
+                        className={`aspect-square rounded-xl border-2 text-2xl flex items-center justify-center transition-all ${
+                          selectedAvatar === emoji 
+                            ? 'border-blue-500 bg-blue-500/20' 
+                            : 'border-zinc-700 hover:border-zinc-500'
+                        }`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-2">Selected: {selectedAvatar || 'None'}</p>
+                </div>
+
+                {/* Preview */}
+                <div className="border-t border-zinc-800 pt-4">
+                  <p className="text-sm font-medium text-zinc-400 mb-3">Preview</p>
+                  <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
+                    <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-lg">
+                      {selectedAvatar || '👤'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{tempDisplayName || 'Anonymous'}</p>
+                      <p className="text-xs text-zinc-500">Your new profile</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setShowSettingsModal(false)}
+                    className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveSettings}
+                    className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        </>
     );
 }

@@ -148,3 +148,17 @@ export const updateUserDisplayName = async (uid: string, displayName: string) =>
         return false;
     }
 };
+
+export const updateUserData = async (uid: string, data: { customDisplayName?: string; customAvatar?: string }) => {
+    try {
+        const userRef = doc(db, "users", uid);
+        await setDoc(userRef, {
+            ...data,
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+        return true;
+    } catch (error) {
+        console.error("Error updating user data:", error);
+        return false;
+    }
+};

@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { getRoom, getUserData, updateUserDisplayName } from "@/lib/firestore";
+import { getRoom, getUserData, updateUserData } from "@/lib/firestore";
 import { sendMessageToRoom, listenToRoomMessages, addReactionToMessage, removeReactionFromMessage, cleanupExpiredMessages } from "@/lib/messages";
 import { 
     sendConnectRequest, 
@@ -25,7 +25,7 @@ import { sendPrivateMessage, listenPrivateMessages } from "@/lib/privateMessages
 import { deleteRoom } from "@/lib/firestore";
 import { db, generateRandomAvatar, generateAvatarFromName } from "@/lib/firebase";
 import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
-import { Send, Users, ChevronLeft, ShieldCheck, UserCheck, Clock, Hash, Zap, Radio, Smile, Trash2, Search, X, Sun, Moon, Reply, Shield, Lock, Trash } from "lucide-react";
+import { Send, Users, ChevronLeft, ShieldCheck, UserCheck, Clock, Hash, Zap, Radio, Smile, Trash2, Search, X, Sun, Moon, Reply, Shield, Lock, Trash, Menu, House, MessageCircle, Settings, User, LogOut } from "lucide-react";
 import EmojiPicker from 'emoji-picker-react';
 
 export default function RoomPage() {
@@ -48,6 +48,7 @@ export default function RoomPage() {
     const [isEditingName, setIsEditingName] = useState(false);
     const [tempDisplayName, setTempDisplayName] = useState("");
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [connectionStatuses, setConnectionStatuses] = useState<{[userId: string]: 'none' | 'pending' | 'accepted' | 'rejected'}>({});
     const [typingUsers, setTypingUsers] = useState<{[userId: string]: string}>({});
     const [isTyping, setIsTyping] = useState(false);
@@ -57,6 +58,9 @@ export default function RoomPage() {
     const [replyingTo, setReplyingTo] = useState<any>(null);
     const [encryptionEnabled, setEncryptionEnabled] = useState(false);
     const [userAvatars, setUserAvatars] = useState<{[uid: string]: string}>({});
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [settingsTempDisplayName, setSettingsTempDisplayName] = useState("");
+    const [selectedAvatar, setSelectedAvatar] = useState("");
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -271,7 +275,7 @@ export default function RoomPage() {
 
     const handleSaveDisplayName = async () => {
         if (!user || !tempDisplayName.trim()) return;
-        const success = await updateUserDisplayName(user.uid, tempDisplayName.trim());
+        const success = await updateUserData(user.uid, { customDisplayName: tempDisplayName.trim() });
         if (success) {
             setUserNames(prev => ({ ...prev, [user.uid]: tempDisplayName.trim() }));
             setIsEditingName(false);
@@ -323,6 +327,32 @@ export default function RoomPage() {
         }
     };
 
+    const handleSaveSettings = async () => {
+        if (!user) return;
+        
+        try {
+            await updateUserData(user.uid, {
+                customDisplayName: settingsTempDisplayName.trim() || undefined,
+                customAvatar: selectedAvatar || undefined
+            });
+            
+            // Update local state
+            setUserNames(prev => ({
+                ...prev,
+                [user.uid]: settingsTempDisplayName.trim() || `User ${user.uid.slice(-4)}`
+            }));
+            
+            setUserAvatars(prev => ({
+                ...prev,
+                [user.uid]: selectedAvatar || generateRandomAvatar(user.uid)
+            }));
+            
+            setShowSettingsModal(false);
+        } catch (error) {
+            console.error("Failed to update settings:", error);
+        }
+    };
+
     if (roomLoading) return (
         <div className="h-screen bg-[#050505] flex flex-col items-center justify-center space-y-4">
             <div className="w-12 h-12 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -341,8 +371,16 @@ export default function RoomPage() {
 
     const decodedTopic = roomData?.topic ? decodeURIComponent(roomData.topic) : "General Chat";
 
+    if (roomLoading) return (
+        <div className="h-screen bg-[#050505] flex flex-col items-center justify-center space-y-4">
+            <div className="w-12 h-12 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <div className="text-blue-500 font-mono text-[10px] uppercase tracking-[0.5em] animate-pulse">Establishing Secure Uplink...</div>
+        </div>
+    );
+
     return (
-        <div className={`flex h-screen ${theme === 'dark' ? 'bg-[#050505] text-zinc-300' : 'bg-gray-100 text-gray-800'} overflow-hidden transition-colors duration-300`}>
+        <>
+            <div className={`flex h-screen ${theme === 'dark' ? 'bg-[#050505] text-zinc-300' : 'bg-gray-100 text-gray-800'} overflow-hidden transition-colors duration-300 ${isMobileMenuOpen ? 'overflow-hidden' : ''}`}>
             {/* SIDEBAR - Ultra Modern Glassmorphism */}
             <aside className={`w-80 ${theme === 'dark' ? 'bg-black/40 border-zinc-800/50' : 'bg-white/80 border-gray-300/50'} flex flex-col z-30 backdrop-blur-2xl`}>
                 <div className="p-8 border-b border-zinc-800/50 relative overflow-hidden group">
@@ -504,14 +542,24 @@ export default function RoomPage() {
 
             {/* CHAT MAIN AREA - Clean & Focused */}
             <main className={`flex-1 flex flex-col relative ${theme === 'dark' ? 'bg-[#050505]' : 'bg-gray-50'}`}>
-                <header className="h-20 border-b border-zinc-900 flex items-center px-10 justify-between bg-black/20 backdrop-blur-md z-20">
-                    <div className="flex flex-col">
-                        <h2 className="text-[11px] font-black tracking-[0.4em] uppercase text-zinc-500">
-                            {currentChat === "group" ? "Signal: Global_Broadcast" : "Signal: Peer_To_Peer_Encrypted"}
-                        </h2>
-                        <p className="text-[9px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">
-                            Latency: 2ms • Security: {encryptionEnabled ? 'E2E Encrypted' : 'High'}
-                        </p>
+                <header className="h-20 border-b border-zinc-900 flex items-center px-4 sm:px-10 justify-between bg-black/20 backdrop-blur-md z-20">
+                    <div className="flex items-center gap-4">
+                        {/* Mobile Hamburger Menu */}
+                        <button 
+                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                            className="sm:hidden p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                        >
+                            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+                        </button>
+                        
+                        <div className="flex flex-col">
+                            <h2 className="text-[11px] font-black tracking-[0.4em] uppercase text-zinc-500">
+                                {currentChat === "group" ? "Signal: Global_Broadcast" : "Signal: Peer_To_Peer_Encrypted"}
+                            </h2>
+                            <p className="text-[9px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">
+                                Latency: 2ms • Security: {encryptionEnabled ? 'E2E Encrypted' : 'High'}
+                            </p>
+                        </div>
                     </div>
                     <div className="flex -space-x-2">
                         {[1,2,3].map(i => (
@@ -544,6 +592,153 @@ export default function RoomPage() {
                         </button>
                     </div>
                 </header>
+
+                {/* Mobile Sidebar */}
+                <div className={`fixed inset-0 z-50 sm:hidden ${isMobileMenuOpen ? 'block' : 'hidden'}`}>
+                    {/* Backdrop */}
+                    <div 
+                        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                    />
+                    
+                    {/* Sidebar */}
+                    <div className={`absolute right-0 top-0 h-full w-80 bg-[#050505] border-l border-white/10 transform transition-transform duration-300 ease-in-out ${
+                        isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
+                    }`}>
+                        <div className="flex flex-col h-full p-6">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-8">
+                                <div className="flex items-center gap-2">
+                                    <Zap className="text-blue-500" fill="currentColor" size={20} />
+                                    <span className="text-lg font-black italic tracking-tighter">DRIFT.</span>
+                                </div>
+                                <button 
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            {/* User Status */}
+                            <div className="mb-8">
+                                {user ? (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
+                                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                                                <User size={16} />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium text-white">{user.displayName || 'Anonymous'}</p>
+                                                <p className="text-xs text-zinc-500">Connected</p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => {
+                                                setIsMobileMenuOpen(false);
+                                                router.push("/");
+                                            }}
+                                            className="w-full flex items-center gap-3 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition-all"
+                                        >
+                                            <LogOut size={16} className="text-red-400" />
+                                            <span className="text-sm font-medium text-red-400">Exit Room</span>
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                setIsMobileMenuOpen(false);
+                                                setSettingsTempDisplayName(userNames[user.uid] || user.displayName || "");
+                                                setSelectedAvatar(userAvatars[user.uid] || generateRandomAvatar(user.uid));
+                                                setShowSettingsModal(true);
+                                            }}
+                                            className="w-full flex items-center gap-3 p-3 bg-zinc-900/50 hover:bg-zinc-800 border border-zinc-700/50 rounded-xl transition-all"
+                                        >
+                                            <Settings size={16} className="text-zinc-400" />
+                                            <span className="text-sm font-medium text-zinc-300">Settings</span>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button 
+                                        onClick={() => router.push("/")}
+                                        className="w-full flex items-center gap-3 p-4 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all"
+                                    >
+                                        <Shield size={16} />
+                                        <span className="text-sm font-medium">Secure Auth</span>
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Navigation Links */}
+                            <div className="flex-1 space-y-2">
+                                <div className="text-xs font-black uppercase tracking-widest text-zinc-600 mb-4">Navigation</div>
+                                
+                                <button 
+                                    onClick={() => {
+                                        setIsMobileMenuOpen(false);
+                                        setCurrentChat("group");
+                                    }}
+                                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
+                                        currentChat === "group" ? 'bg-blue-600/20 border border-blue-500/30' : 'hover:bg-zinc-900/50'
+                                    }`}
+                                >
+                                    <Radio size={16} className={currentChat === "group" ? "text-blue-400" : "text-zinc-400"} />
+                                    <span className="text-sm font-medium">Public Chat</span>
+                                </button>
+
+                                {privateRooms.length > 0 && (
+                                    <div className="space-y-1">
+                                        <div className="text-xs font-black uppercase tracking-widest text-zinc-600 mb-2">Private Chats</div>
+                                        {privateRooms.map(room => {
+                                            const otherUserId = room.userA === user?.uid ? room.userB : room.userA;
+                                            const otherUserName = userNames[otherUserId] || `User ${otherUserId?.slice(-4)}`;
+                                            
+                                            return (
+                                                <button 
+                                                    key={room.id}
+                                                    onClick={() => {
+                                                        setIsMobileMenuOpen(false);
+                                                        setCurrentChat(room.id);
+                                                    }}
+                                                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
+                                                        currentChat === room.id ? 'bg-purple-600/20 border border-purple-500/30' : 'hover:bg-zinc-900/50'
+                                                    }`}
+                                                >
+                                                    <MessageCircle size={16} className={currentChat === room.id ? "text-purple-400" : "text-zinc-400"} />
+                                                    <span className="text-sm font-medium truncate">{otherUserName}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                <button 
+                                    onClick={() => {
+                                        setIsMobileMenuOpen(false);
+                                        router.push("/");
+                                    }}
+                                    className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                                >
+                                    <House size={16} className="text-zinc-400" />
+                                    <span className="text-sm font-medium">Home</span>
+                                </button>
+
+                                <button className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left">
+                                    <Settings size={16} className="text-zinc-400" />
+                                    <span className="text-sm font-medium">Settings</span>
+                                </button>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="border-t border-white/10 pt-6 space-y-3">
+                                <div className="text-center space-y-2">
+                                    <div className="text-[8px] font-black uppercase tracking-[0.4em] text-zinc-700">DEVELOPED BY</div>
+                                    <div className="text-sm font-bold text-blue-400">Parth Tiwari</div>
+                                    <div className="text-[7px] text-zinc-500 font-medium">GitHub: @parthtiwari2599</div>
+                                    <div className="text-[7px] text-zinc-500 font-medium">parthtiwari2599@gmail.com</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 {/* Notifications - Fixed Logic Position */}
                 {incomingRequests.length > 0 && (
@@ -838,5 +1033,99 @@ export default function RoomPage() {
                 </footer>
             </main>
         </div>
+
+        {/* Settings Modal */}
+        {showSettingsModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setShowSettingsModal(false)}
+            />
+            
+            {/* Modal */}
+            <div className="relative bg-[#050505] border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-black text-white">Settings</h3>
+                <button 
+                  onClick={() => setShowSettingsModal(false)}
+                  className="p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Display Name */}
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Display Name</label>
+                  <input
+                    type="text"
+                    value={settingsTempDisplayName}
+                    onChange={(e) => setSettingsTempDisplayName(e.target.value)}
+                    className="w-full bg-zinc-900/50 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                    placeholder="Enter your display name"
+                    maxLength={30}
+                  />
+                </div>
+
+                {/* Avatar Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-3">Choose Avatar</label>
+                  <div className="grid grid-cols-4 gap-3">
+                    {[
+                      '👤', '🎭', '🤖', '👨‍💻', '👩‍💻', '🦊', '🐺', '🐱', 
+                      '🦁', '🐼', '🐨', '🦄', '🐉', '🌟', '⚡', '🔥'
+                    ].map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => setSelectedAvatar(emoji)}
+                        className={`aspect-square rounded-xl border-2 text-2xl flex items-center justify-center transition-all ${
+                          selectedAvatar === emoji 
+                            ? 'border-blue-500 bg-blue-500/20' 
+                            : 'border-zinc-700 hover:border-zinc-500'
+                        }`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-2">Selected: {selectedAvatar || 'None'}</p>
+                </div>
+
+                {/* Preview */}
+                <div className="border-t border-zinc-800 pt-4">
+                  <p className="text-sm font-medium text-zinc-400 mb-3">Preview</p>
+                  <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
+                    <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-lg">
+                      {selectedAvatar || '👤'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{settingsTempDisplayName || 'Anonymous'}</p>
+                      <p className="text-xs text-zinc-500">Your new profile</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setShowSettingsModal(false)}
+                    className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveSettings}
+                    className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        </>
     );
 }
