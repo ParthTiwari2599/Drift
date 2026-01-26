@@ -1,0 +1,11 @@
+specVersion: "v1beta"
+serviceId: "drift"
+location: "us-central1"
+schema:
+  source: ./schema
+  datasource:
+    postgresql:
+      database: "drift"
+      cloudSql:
+        instanceId: "drift-instance"
+connectorDirs: ["./connector"]

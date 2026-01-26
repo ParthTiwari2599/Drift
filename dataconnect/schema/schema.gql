@@ -1,0 +1,19 @@
+type User @table {
+  id: String! @col
+  name: String! @col
+  email: String! @col
+}
+
+type Room @table {
+  id: String! @col
+  name: String! @col
+  createdBy: String! @col
+}
+
+type Message @table {
+  id: String! @col
+  roomId: String! @col
+  userId: String! @col
+  content: String! @col
+  timestamp: Timestamp! @col
+}

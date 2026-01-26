@@ -1,0 +1,12 @@
+mutation SeedData {
+  user_insert(data: {
+    id: "user1"
+    name: "John Doe"
+    email: "john@example.com"
+  })
+  room_insert(data: {
+    id: "room1"
+    name: "General"
+    createdBy: "user1"
+  })
+}

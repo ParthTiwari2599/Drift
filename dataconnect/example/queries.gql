@@ -1,0 +1,16 @@
+query GetRooms {
+  rooms {
+    id
+    name
+    createdBy
+  }
+}
+
+query GetMessages($roomId: String!) {
+  messages(where: { roomId: { eq: $roomId } }) {
+    id
+    content
+    userId
+    timestamp
+  }
+}

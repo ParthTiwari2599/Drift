@@ -1,0 +1,15 @@
+mutation CreateRoom($name: String!, $createdBy: String!) {
+  room_insert(data: {
+    name: $name
+    createdBy: $createdBy
+  })
+}
+
+mutation SendMessage($roomId: String!, $userId: String!, $content: String!) {
+  message_insert(data: {
+    roomId: $roomId
+    userId: $userId
+    content: $content
+    timestamp: "CURRENT_TIMESTAMP"
+  })
+}

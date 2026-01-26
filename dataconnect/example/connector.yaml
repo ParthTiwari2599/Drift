@@ -1,0 +1,6 @@
+connectorId: "drift-connector"
+generate:
+  javascriptSdk:
+    outputDir: "../../src/dataconnect-generated"
+    package: "@dataconnect/drift"
+    packageJsonDir: "../../src/dataconnect-generated"
