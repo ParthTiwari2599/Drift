@@ -8,6 +8,8 @@ import {
   serverTimestamp,
   doc,
   getDoc,
+  setDoc,
+  updateDoc,
 } from "firebase/firestore";
 
 export const createOrJoinRoom = async (topic: string) => {
@@ -48,6 +50,7 @@ export const getRoom = async (roomId: string) => {
 
   return null;
 };
+
 export const getUserData = async (uid: string) => {
     try {
         const userRef = doc(db, "users", uid);
@@ -59,5 +62,19 @@ export const getUserData = async (uid: string) => {
     } catch (error) {
         console.error("Error fetching user data:", error);
         return null;
+    }
+};
+
+export const updateUserDisplayName = async (uid: string, displayName: string) => {
+    try {
+        const userRef = doc(db, "users", uid);
+        await setDoc(userRef, {
+            customDisplayName: displayName,
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+        return true;
+    } catch (error) {
+        console.error("Error updating user display name:", error);
+        return false;
     }
 };

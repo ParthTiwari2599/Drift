@@ -29,6 +29,7 @@ export const createPrivateRoom = async (userA: string, userB: string) => {
   const ref = await addDoc(collection(db, "private_rooms"), {
     userA,
     userB,
+    userNames: {}, // { userId: displayName }
     customName: null, // Custom name for the chat
     createdAt: serverTimestamp(),
   });
@@ -41,6 +42,15 @@ export const updatePrivateRoomName = async (roomId: string, customName: string) 
   const roomRef = doc(db, "private_rooms", roomId);
   await updateDoc(roomRef, {
     customName,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+// ✅ Update user display name in private room
+export const updateUserDisplayName = async (roomId: string, userId: string, displayName: string) => {
+  const roomRef = doc(db, "private_rooms", roomId);
+  await updateDoc(roomRef, {
+    [`userNames.${userId}`]: displayName,
     updatedAt: serverTimestamp(),
   });
 };
