@@ -12,8 +12,11 @@ import {
   updateDoc,
   deleteDoc,
 } from "firebase/firestore";
+import bcrypt from "bcryptjs";
 
-// Utility function for retrying Firebase operations
+/**
+ * 🛠 UTILITY: Firebase operation retry logic with connection check
+ */
 const retryFirebaseOperation = async <T>(
   operation: () => Promise<T>,
   maxRetries: number = 3,
@@ -23,124 +26,105 @@ const retryFirebaseOperation = async <T>(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // Check if we're online before attempting
       if (!getConnectionStatus() && attempt === 1) {
-        throw new Error("No internet connection. Please check your network and try again.");
+        throw new Error("No internet connection. Please check your network.");
       }
-
       return await operation();
     } catch (error: any) {
       lastError = error;
-
-      // Don't retry for certain errors
-      if (error.code === 'permission-denied' ||
-          error.code === 'not-found' ||
-          error.message?.includes('permission')) {
+      // In errors par retry nahi karna hai
+      if (
+        error.code === 'permission-denied' ||
+        error.code === 'not-found' ||
+        error.message?.includes('permission') ||
+        error.message === "INVALID_PASSWORD" ||
+        error.message === "PASSWORD_REQUIRED"
+      ) {
         throw error;
       }
 
-      // If this is the last attempt, throw the error
-      if (attempt === maxRetries) {
-        break;
-      }
-
-      // Wait before retrying
+      if (attempt === maxRetries) break;
       await new Promise(resolve => setTimeout(resolve, delay * attempt));
     }
   }
-
   throw lastError!;
 };
 
-export const createOrJoinRoom = async (topic: string, password?: string, creatorId?: string) => {
+/* ================= ROOM OPERATIONS ================= */
+
+/**
+ * Creates a room or joins an existing one using a slug.
+ * Integrated with bcrypt for secure password handling.
+ */
+export const createOrJoinRoom = async (topic: string, password?: string, userId?: string) => {
   return retryFirebaseOperation(async () => {
     const roomsRef = collection(db, "rooms");
+    const slug = topic.trim().replace(/\s+/g, "-").toLowerCase();
 
-    // Check if active room exists for this topic
-    const q = query(
-      roomsRef,
-      where("topic", "==", topic)
-    );
-
+    // 🔍 Find room by slug
+    const q = query(roomsRef, where("slug", "==", slug));
     const snapshot = await getDocs(q);
 
+    // JOIN EXISTING ROOM
     if (!snapshot.empty) {
-      // Join existing room
       const roomDoc = snapshot.docs[0];
       const roomData = roomDoc.data();
 
-      // Check if room is password protected
-      if (roomData.isLocked && password) {
-        if (password !== roomData.password) {
-          throw new Error("Invalid password");
-        }
-      } else if (roomData.isLocked && !password) {
-        throw new Error("Password required");
+      if (roomData.isLocked) {
+        if (!password) throw new Error("PASSWORD_REQUIRED");
+        
+        const isMatch = await bcrypt.compare(password, roomData.passwordHash);
+        if (!isMatch) throw new Error("INVALID_PASSWORD");
       }
 
-      return { id: roomDoc.id, ...roomDoc.data() };
+      return { id: roomDoc.id, ...roomData };
     }
 
-    // Create new room
-    const roomData: any = {
+    // CREATE NEW ROOM
+    let passwordHash = null;
+    if (password) {
+      passwordHash = await bcrypt.hash(password, 10);
+    }
+
+    const roomData = {
       topic,
+      slug,
       active: true,
+      isLocked: !!password,
+      passwordHash: passwordHash,
+      createdBy: userId || null,
       createdAt: serverTimestamp(),
-      createdBy: creatorId,
     };
 
-    if (password) {
-      roomData.isLocked = true;
-      roomData.password = password; // Note: In production, this should be hashed
-    } else {
-      roomData.isLocked = false;
-    }
-
     const newRoom = await addDoc(roomsRef, roomData);
-
     return { id: newRoom.id, ...roomData };
   });
 };
 
-export const deleteRoom = async (roomId: string, userId: string) => {
+/**
+ * Specifically finds a private (locked) room.
+ */
+export const findPrivateRoom = async (roomName: string, password: string) => {
   return retryFirebaseOperation(async () => {
-    const roomRef = doc(db, "rooms", roomId);
-    const roomSnap = await getDoc(roomRef);
+    const roomsRef = collection(db, "rooms");
+    const slug = roomName.trim().replace(/\s+/g, "-").toLowerCase();
 
-    if (!roomSnap.exists()) {
-      throw new Error("Room not found");
-    }
+    const q = query(
+      roomsRef,
+      where("slug", "==", slug),
+      where("isLocked", "==", true)
+    );
 
-    const roomData = roomSnap.data();
+    const snap = await getDocs(q);
+    if (snap.empty) throw new Error("ROOM_NOT_FOUND");
 
-    // Only allow creator to delete the room
-    if (roomData.createdBy !== userId) {
-      throw new Error("Only room creator can delete this room");
-    }
+    const roomDoc = snap.docs[0];
+    const roomData = roomDoc.data();
 
-    // Delete the room document
-    await deleteDoc(roomRef);
+    const match = await bcrypt.compare(password, roomData.passwordHash);
+    if (!match) throw new Error("INVALID_PASSWORD");
 
-    return true;
-  });
-};
-
-export const verifyRoomPassword = async (roomId: string, password: string) => {
-  return retryFirebaseOperation(async () => {
-    const roomRef = doc(db, "rooms", roomId);
-    const roomSnap = await getDoc(roomRef);
-
-    if (!roomSnap.exists()) {
-      throw new Error("Room not found");
-    }
-
-    const roomData = roomSnap.data();
-
-    if (!roomData.isLocked) {
-      return true; // Room is not locked
-    }
-
-    return password === roomData.password;
+    return { id: roomDoc.id, ...roomData };
   });
 };
 
@@ -152,30 +136,34 @@ export const getRoom = async (roomId: string) => {
     if (roomSnap.exists()) {
       return { id: roomSnap.id, ...roomSnap.data() };
     }
-
     throw new Error("Room not found");
   });
 };
+
+export const deleteRoom = async (roomId: string, userId: string) => {
+  return retryFirebaseOperation(async () => {
+    const roomRef = doc(db, "rooms", roomId);
+    const roomSnap = await getDoc(roomRef);
+
+    if (!roomSnap.exists()) throw new Error("Room not found");
+
+    const roomData = roomSnap.data();
+    if (roomData.createdBy !== userId) {
+      throw new Error("Only room creator can delete this room");
+    }
+
+    await deleteDoc(roomRef);
+    return true;
+  });
+};
+
+/* ================= USER OPERATIONS ================= */
 
 export const getUserData = async (uid: string) => {
   return retryFirebaseOperation(async () => {
     const userRef = doc(db, "users", uid);
     const userSnap = await getDoc(userRef);
-    if (userSnap.exists()) {
-      return userSnap.data();
-    }
-    return null;
-  });
-};
-
-export const updateUserDisplayName = async (uid: string, displayName: string) => {
-  return retryFirebaseOperation(async () => {
-    const userRef = doc(db, "users", uid);
-    await setDoc(userRef, {
-      customDisplayName: displayName,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    return true;
+    return userSnap.exists() ? userSnap.data() : null;
   });
 };
 

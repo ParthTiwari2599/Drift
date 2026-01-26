@@ -138,24 +138,39 @@ export default function Home() {
     }
   };
 
-  const joinRoom = async (room: Room) => {
-    setIsMobileMenuOpen(false); // Close mobile menu
-    
-    if (room.isLocked) {
-      const password = prompt("This room is password protected. Enter password:");
-      if (!password) return;
+  const findAndOpenRoom = async () => {
+    const name = prompt("Enter room name to find:");
+    if (!name) return;
+    const password = prompt("Enter password if the room is protected (leave blank otherwise):");
 
-      try {
-        const verifiedRoom = await createOrJoinRoom(room.topic, password);
-        router.push(`/room/${verifiedRoom.id}`);
-      } catch (error) {
-        alert("Invalid password");
-        return;
-      }
-    } else {
+    const slug = name.trim().replace(/\s+/g, '-').toLowerCase();
+    try {
+      const room = await createOrJoinRoom(slug, password || undefined);
       router.push(`/room/${room.id}`);
+    } catch (error) {
+      alert("Failed to open room: " + (error as Error).message);
     }
   };
+
+const joinRoom = async (room: Room) => {
+  setIsMobileMenuOpen(false);
+  
+  if (room.isLocked) {
+    const password = prompt("This room is password protected. Enter password:");
+    if (!password) return;
+
+    try {
+      // ✅ FIXED LINE
+      const verifiedRoom = await createOrJoinRoom(room.id, password);
+      router.push(`/room/${verifiedRoom.id}`);
+    } catch (error) {
+      alert("Invalid password");
+      return;
+    }
+  } else {
+    router.push(`/room/${room.id}`);
+  }
+};
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-blue-500 font-mono italic text-sm sm:text-base">INITIALIZING_DRIFT...</div>;
 
@@ -493,7 +508,10 @@ export default function Home() {
                 <span className="text-blue-500 font-black uppercase tracking-[0.3em] text-[10px]">Network Monitor</span>
                 <h2 className="text-3xl sm:text-4xl font-black italic tracking-tighter">ACTIVE UPLINKS</h2>
             </div>
+          <div className="flex items-center gap-4">
             <p className="text-zinc-500 max-w-xs text-sm font-medium">Real-time signals currently broadcasting on the DRIFT protocol.</p>
+            <button onClick={findAndOpenRoom} className="px-3 py-2 bg-zinc-900/40 border border-white/5 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all">Find Room</button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
