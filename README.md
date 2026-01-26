@@ -8,6 +8,9 @@ Drift: A real-time, high-performance anonymous chat engine. Built with Next.js a
 - **Private Messaging**: Securely connect and chat privately with other users.
 - **Real-time Updates**: Live messaging with Firebase Firestore.
 - **Presence Tracking**: See who's online in each room in real-time.
+- **Automatic Message Deletion**: All messages automatically expire and delete after 2 hours from both UI and database.
+- **Password-Protected Rooms**: Create secure rooms with password protection.
+- **Room Management**: Delete rooms you created with all associated data.
 - **Cyber-minimalist UI**: Designed for seamless global and private communication.
 
 ## Setup

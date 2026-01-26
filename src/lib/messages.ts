@@ -11,6 +11,8 @@ import {
   updateDoc,
   arrayUnion,
   arrayRemove,
+  getDocs,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -20,7 +22,7 @@ export const sendMessageToRoom = async (
   text: string,
   userId: string,
   type: "text" | "image" | "emoji" | "sticker" = "text",
-  deleteMode?: "never" | "seen" | "24h" | "36h",
+  deleteMode?: "never" | "seen" | "24h" | "2h",
   replyTo?: any
 ) => {
   if (!topic || !text || !userId) {
@@ -28,14 +30,14 @@ export const sendMessageToRoom = async (
   }
 
   const now = Date.now();
-  const expireAt = deleteMode === "36h" ? Timestamp.fromMillis(now + 36 * 60 * 60 * 1000) : null;
+  const expireAt = deleteMode === "2h" ? Timestamp.fromMillis(now + 2 * 60 * 60 * 1000) : null;
 
   await addDoc(collection(db, "messages"), {
     roomId: topic, // topic = roomId
     text,
     userId,
     type,
-    deleteMode: deleteMode || "36h", // group default 36h
+    deleteMode: deleteMode || "2h", // group default 2h
     expireAt,
     replyTo,
     createdAt: serverTimestamp(),
@@ -88,4 +90,23 @@ export const removeReactionFromMessage = async (
   await updateDoc(messageRef, {
     [`reactions.${emoji}`]: arrayRemove(userId)
   });
+};
+
+// 🔥 Cleanup expired messages (call this periodically)
+export const cleanupExpiredMessages = async () => {
+  try {
+    const now = Timestamp.now();
+    const q = query(
+      collection(db, "messages"),
+      where("expireAt", "<=", now)
+    );
+
+    const snapshot = await getDocs(q);
+    const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+
+    await Promise.all(deletePromises);
+    console.log(`Cleaned up ${deletePromises.length} expired messages`);
+  } catch (error) {
+    console.error("Error cleaning up expired messages:", error);
+  }
 };

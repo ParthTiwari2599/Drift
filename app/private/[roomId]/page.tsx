@@ -245,6 +245,17 @@ export default function PrivateRoomPage() {
                                     <span className="text-[8px] font-black uppercase tracking-tighter text-zinc-500">
                                         {msg.createdAt?.toDate ? new Date(msg.createdAt.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Verified'}
                                     </span>
+                                    {/* Expiry Indicator */}
+                                    {msg.createdAt?.toDate && (
+                                        <span className="text-[7px] text-orange-400/60 font-medium">
+                                            {(() => {
+                                                const createdTime = msg.createdAt.toDate().getTime();
+                                                const expiryTime = createdTime + 2 * 60 * 60 * 1000;
+                                                const timeLeft = Math.max(0, expiryTime - Date.now());
+                                                return Math.floor(timeLeft / (1000 * 60)) + 'm left';
+                                            })()}
+                                        </span>
+                                    )}
                                     {isMe && msg.id && (
                                         <button
                                             onClick={() => handleDeleteMessage(msg.id)}

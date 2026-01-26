@@ -16,13 +16,15 @@ export const sendPrivateMessage = async (
   text: string,
   userId: string,
   type: "text" | "image" | "emoji" | "sticker" = "text",
-  deleteMode: "never" | "seen" | "24h" = "never",
+  deleteMode: "never" | "seen" | "24h" | "2h" = "2h",
   replyTo?: any
 ) => {
   const now = Date.now();
   let expireAt: Timestamp | null = null;
 
-  if (deleteMode === "24h") {
+  if (deleteMode === "2h") {
+    expireAt = Timestamp.fromMillis(now + 2 * 60 * 60 * 1000);
+  } else if (deleteMode === "24h") {
     expireAt = Timestamp.fromMillis(now + 24 * 60 * 60 * 1000);
   }
 

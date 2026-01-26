@@ -17,13 +17,9 @@ export const useAuth = () => {
   const [hasInitialized, setHasInitialized] = useState(false);
 
   useEffect(() => {
-    console.log("Setting up auth listener...");
-
     const initializeAuth = async () => {
       try {
-        console.log("Attempting anonymous sign in...");
         const result = await signInAnonymously(auth);
-        console.log("Anonymous sign in successful:", result.user.uid);
         setUser(result.user);
       } catch (error) {
         console.error("Anonymous auth error:", error);
@@ -41,11 +37,6 @@ export const useAuth = () => {
     }, 500);
 
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log(
-        "Auth state changed:",
-        currentUser ? `user: ${currentUser.uid}` : "no user"
-      );
-
       if (currentUser) {
         setUser(currentUser);
         setLoading(false);

@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { getRoom, getUserData, updateUserDisplayName } from "@/lib/firestore";
-import { sendMessageToRoom, listenToRoomMessages, addReactionToMessage, removeReactionFromMessage } from "@/lib/messages";
+import { sendMessageToRoom, listenToRoomMessages, addReactionToMessage, removeReactionFromMessage, cleanupExpiredMessages } from "@/lib/messages";
 import { 
     sendConnectRequest, 
     listenIncomingRequests, 
@@ -99,6 +99,18 @@ export default function RoomPage() {
         );
         return () => unsubs.forEach(unsub => unsub());
     }, [privateRooms]);
+
+    // Automatic cleanup of expired messages every 30 minutes
+    useEffect(() => {
+        const cleanupInterval = setInterval(() => {
+            cleanupExpiredMessages();
+        }, 30 * 60 * 1000); // 30 minutes
+
+        // Run cleanup immediately when component mounts
+        cleanupExpiredMessages();
+
+        return () => clearInterval(cleanupInterval);
+    }, []);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -428,16 +440,22 @@ export default function RoomPage() {
                             {currentChat === "group" && <div className="w-1.5 h-1.5 bg-black rounded-full" />}
                         </div>
                         
-                        {privateRooms.map(room => (
-                            <div 
-                                key={room.id} 
-                                onClick={() => setCurrentChat(room.id)}
-                                className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer transition-all mb-2 border ${currentChat === room.id ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'hover:bg-zinc-900/50 border-transparent text-zinc-500 hover:text-zinc-200'}`}
-                            >
-                                <div className={`w-2 h-2 rounded-full ${currentChat === room.id ? 'bg-white animate-pulse' : 'bg-blue-600/40'}`} />
-                                <span className="text-xs font-black uppercase tracking-tight">Node_{room.id.slice(-4)}</span>
-                            </div>
-                        ))}
+                        {privateRooms.map(room => {
+                            // Get the other user's ID and name
+                            const otherUserId = room.userA === user?.uid ? room.userB : room.userA;
+                            const otherUserName = userNames[otherUserId] || `User ${otherUserId?.slice(-4)}`;
+                            
+                            return (
+                                <div 
+                                    key={room.id} 
+                                    onClick={() => setCurrentChat(room.id)}
+                                    className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer transition-all mb-2 border ${currentChat === room.id ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'hover:bg-zinc-900/50 border-transparent text-zinc-500 hover:text-zinc-200'}`}
+                                >
+                                    <div className={`w-2 h-2 rounded-full ${currentChat === room.id ? 'bg-white animate-pulse' : 'bg-blue-600/40'}`} />
+                                    <span className="text-xs font-black uppercase tracking-tight">{otherUserName}</span>
+                                </div>
+                            );
+                        })}
                     </section>
 
                     {/* Peer Discovery */}
@@ -647,6 +665,17 @@ export default function RoomPage() {
                                         <span className="text-[9px] font-bold text-zinc-600 uppercase">
                                             {msg.createdAt?.toDate ? new Date(msg.createdAt.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Delivered'}
                                         </span>
+                                        {/* Expiry Indicator */}
+                                        {msg.createdAt?.toDate && (
+                                            <span className="text-[8px] text-orange-400/70 font-medium">
+                                                {(() => {
+                                                    const createdTime = msg.createdAt.toDate().getTime();
+                                                    const expiryTime = createdTime + 2 * 60 * 60 * 1000;
+                                                    const timeLeft = Math.max(0, expiryTime - Date.now());
+                                                    return 'Expires in ' + Math.floor(timeLeft / (1000 * 60)) + 'm';
+                                                })()}
+                                            </span>
+                                        )}
                                         {isMe && (
                                             <span className="text-[8px] text-zinc-500">
                                                 {msg.readBy && msg.readBy.length > 0 ? `Read by ${msg.readBy.length}` : 'Sent'}
