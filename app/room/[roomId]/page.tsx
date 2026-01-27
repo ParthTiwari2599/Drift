@@ -178,8 +178,8 @@ export default function RoomPage() {
             return;
         }
 
-        // If no messages, send welcome message
-        const welcomeMessage = `🎉 Welcome to DRIFT Room! 🎉\n\n🚫 Please do NOT take anyone to Instagram or other platforms from here.\n🌟 Enjoy this secure, ephemeral messaging experience.\n📝 Give us feedback to improve DRIFT!\n\nYour messages disappear after 2 hours for privacy. 💫`;
+        // If no messages, send updated welcome message
+        const welcomeMessage = `🕶️ The room is active.\n\nYou've entered a temporary zone. Once the clock hits 2 hours, this conversation is gone forever.\n\n🔒 The Golden Rule: Don't ruin the mystery—avoid taking people to Instagram. Real connections don't need a follow button. ✍️ Co-create DRIFT: Tell us what you think. We’re listening.`;
         sendMessageToRoom(roomId as string, welcomeMessage, "system", "text", "never");
         if (typeof window !== 'undefined') {
             localStorage.setItem(welcomeKey, '1');
