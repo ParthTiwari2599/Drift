@@ -264,7 +264,7 @@ export default function Home() {
           if (!password) return;
           try {
             // Fetch the room and check password
-            const roomData = await getRoom(room.id);
+            const roomData = await getRoom(room.id) as Room;
             if (!roomData.passwordHash) throw new Error("No password set");
             const bcrypt = await import('bcryptjs');
             const isMatch = await bcrypt.compare(password, roomData.passwordHash);
