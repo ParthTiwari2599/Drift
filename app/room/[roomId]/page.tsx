@@ -406,13 +406,27 @@ export default function RoomPage() {
         }
     };
 
+    // Uploads audioBlob to Cloudinary and sends the secure_url as the message
     const sendVoiceNote = async (audioBlob: Blob) => {
         if (!user) return;
         const replyData = replyingTo;
         setReplyingTo(null);
-        // create object URL instead of base64
-        const audioURL = URL.createObjectURL(audioBlob);
         try {
+            // Prepare form data for Cloudinary unsigned upload
+            const formData = new FormData();
+            formData.append("file", audioBlob, "voice_note.webm");
+            formData.append("upload_preset", "drift_voice");
+            formData.append("cloud_name", "dwbh4uxwe");
+
+            // Upload to Cloudinary
+            const response = await fetch("https://api.cloudinary.com/v1_1/dwbh4uxwe/auto/upload", {
+                method: "POST",
+                body: formData,
+            });
+            const data = await response.json();
+            if (!data.secure_url) throw new Error("Cloudinary upload failed");
+            const audioURL = data.secure_url;
+
             if (currentChat === "group") {
                 await sendMessageToRoom(
                     roomId as string,
