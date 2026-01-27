@@ -1032,8 +1032,7 @@ export default function RoomPage() {
                                 .map((msg, i) => {
                                     const isMe = msg.userId === user.uid;
                                     const isSystem = msg.userId === "system";
-                                    const senderName =
-                                        userNames[msg.userId] || `User ${msg.userId?.slice(-4)}`;
+                                    const senderName = userNames[msg.userId] || "Unknown";
                                     
                                     if (isSystem) {
                                         return (
