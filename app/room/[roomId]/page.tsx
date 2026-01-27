@@ -683,7 +683,7 @@ export default function RoomPage() {
                                     </div>
                                 ) : (
                                     <p className="text-sm text-white font-medium truncate">
-                                        {userNames[user.uid] || user.displayName || "Anonymous Node"}
+                                        {userNames[user.uid] || user.displayName || "Unknown"}
                                     </p>
                                 )}
                             </div>
@@ -722,8 +722,7 @@ export default function RoomPage() {
                                 {privateRooms.map((room) => {
                                     const otherUserId =
                                         room.userA === user?.uid ? room.userB : room.userA;
-                                    const otherUserName =
-                                        userNames[otherUserId] || `User ${otherUserId?.slice(-4)}`;
+                                    const otherUserName = userNames[otherUserId] || "Unknown";
 
                                     return (
                                         <div
@@ -772,8 +771,7 @@ export default function RoomPage() {
                                                 >
                                                     {u.userId === user.uid
                                                         ? "YOU (HOST)"
-                                                        : userNames[u.userId] ||
-                                                        `User ${u.userId.slice(-4)}`}
+                                                        : userNames[u.userId] || "Unknown"}
                                                 </span>
                                                 <span className="text-[8px] text-zinc-600 font-bold uppercase">
                                                     Active Now
@@ -1293,8 +1291,7 @@ export default function RoomPage() {
                                                     Replying to
                                                 </span>
                                                 <span className="text-[10px] sm:text-xs text-blue-300">
-                                                    {userNames[replyingTo.userId] ||
-                                                        `User ${replyingTo.userId?.slice(-4)}`}
+                                                    {userNames[replyingTo.userId] || "Unknown"}
                                                 </span>
                                             </div>
                                             <button

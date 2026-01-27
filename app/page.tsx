@@ -430,7 +430,7 @@ export default function Home() {
               </>
             )}
 
-            {user && !user.isAnonymous && <FriendsList />}
+            {user && <FriendsList />}
 
             <div className="pt-4 border-t border-zinc-800/50 mt-8">
               <button

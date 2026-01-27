@@ -205,19 +205,21 @@ export default function FriendsList() {
       <div className="max-h-40 overflow-y-auto space-y-1">
         {loading ? (
           <div className="text-xs text-zinc-500">Loading...</div>
-        ) : friends.length === 0 ? (
-          <div className="text-xs text-zinc-500">No friends yet</div>
         ) : (
-          friends.map((friend) => (
-            <button
-              key={friend.id}
-              onClick={() => openPrivateChat(friend.id)}
-              className="w-full flex items-center gap-3 p-2 hover:bg-zinc-900/50 rounded-lg transition-all text-left"
-            >
-              <MessageCircle size={14} className="text-blue-400" />
-              <span className="text-sm font-medium truncate">{friend.name}</span>
-            </button>
-          ))
+          friends.length === 0 ? (
+            <div className="text-xs text-zinc-500">You have no friends yet. Add some!</div>
+          ) : (
+            friends.map((friend) => (
+              <button
+                key={friend.id}
+                onClick={() => openPrivateChat(friend.id)}
+                className="w-full flex items-center gap-3 p-2 hover:bg-zinc-900/50 rounded-lg transition-all text-left"
+              >
+                <MessageCircle size={14} className="text-blue-400" />
+                <span className="text-sm font-medium truncate">{friend.name}</span>
+              </button>
+            ))
+          )
         )}
       </div>
     </div>
