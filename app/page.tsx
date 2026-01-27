@@ -46,6 +46,7 @@ interface Room {
   createdAt?: any;
   isLocked?: boolean;
   createdBy?: string;
+  passwordHash?: string | null;
 }
 
 export default function Home() {
