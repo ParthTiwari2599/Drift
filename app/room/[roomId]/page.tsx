@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
+import { AppModal } from "@/components/AppModal";
 import { getRoom, getUserData, updateUserData } from "@/lib/firestore";
 import {
     sendMessageToRoom,
@@ -154,22 +155,37 @@ export default function RoomPage() {
         };
     }, [roomId, user]);
 
-    // Send welcome message if room is empty
+    // Send welcome message if not already present, only once per user per room
     useEffect(() => {
-        if (messages.length === 0 && user && roomId && roomData && !welcomeSentRef.current) {
+        if (!user || !roomId || !roomData || !Array.isArray(messages) || welcomeSentRef.current) return;
+        const welcomeKey = `drift_welcome_sent_${roomId}_${user.uid}`;
+        if (typeof window !== 'undefined' && localStorage.getItem(welcomeKey)) {
             welcomeSentRef.current = true;
-            const welcomeMessage = `🎉 Welcome to DRIFT Room! 🎉
-
-🚫 Please do NOT take anyone to Instagram or other platforms from here.
-🌟 Enjoy this secure, ephemeral messaging experience.
-📝 Give us feedback to improve DRIFT!
-
-Your messages disappear after 2 hours for privacy. 💫`;
-
-            // Send as system message
-            sendMessageToRoom(roomId as string, welcomeMessage, "system", "text", "never");
+            return;
         }
-    }, [messages.length, user, roomId, roomData]);
+
+        // If there are messages, check if welcome message exists
+        if (messages.length > 0) {
+            const welcomeExists = messages.some(
+                (msg) => msg.userId === 'system' && typeof msg.text === 'string' && msg.text.includes('Welcome to DRIFT Room')
+            );
+            if (welcomeExists) {
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem(welcomeKey, '1');
+                }
+                welcomeSentRef.current = true;
+            }
+            return;
+        }
+
+        // If no messages, send welcome message
+        const welcomeMessage = `🎉 Welcome to DRIFT Room! 🎉\n\n🚫 Please do NOT take anyone to Instagram or other platforms from here.\n🌟 Enjoy this secure, ephemeral messaging experience.\n📝 Give us feedback to improve DRIFT!\n\nYour messages disappear after 2 hours for privacy. 💫`;
+        sendMessageToRoom(roomId as string, welcomeMessage, "system", "text", "never");
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(welcomeKey, '1');
+        }
+        welcomeSentRef.current = true;
+    }, [messages, user, roomId, roomData]);
 
     useEffect(() => {
         const unsubs = privateRooms.map((room) =>
@@ -180,22 +196,6 @@ Your messages disappear after 2 hours for privacy. 💫`;
         return () => unsubs.forEach((unsub) => unsub());
     }, [privateRooms]);
 
-    // Trigger animation for sender when private room is created from accepted request
-    useEffect(() => {
-        if (privateRooms.length > prevPrivateRoomsLength && !animationTriggered) {
-            const latestRoom = privateRooms[privateRooms.length - 1];
-            const otherUserId = latestRoom.userA === user?.uid ? latestRoom.userB : latestRoom.userA;
-            const otherUserName = userNames[otherUserId] || `User ${otherUserId?.slice(-4)}`;
-            setNewConnectionUser(otherUserName);
-            setShowConnectionAnimation(true);
-            setAnimationTriggered(true);
-            setTimeout(() => {
-                setShowConnectionAnimation(false);
-                setAnimationTriggered(false);
-            }, 2500); // Reduced to 2.5 seconds
-        }
-        setPrevPrivateRoomsLength(privateRooms.length);
-    }, [privateRooms, animationTriggered, userNames, user, prevPrivateRoomsLength]);
 
     // Automatic cleanup of expired messages every 30 minutes
     useEffect(() => {

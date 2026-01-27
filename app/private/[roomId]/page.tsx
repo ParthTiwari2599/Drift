@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { AppModal } from "@/components/AppModal";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { sendPrivateMessage, listenPrivateMessages } from "@/lib/privateMessages";

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { AppModal } from "@/components/AppModal";
 import { useAuth } from "@/hooks/useAuth";
 import { getFriends, getUserDisplayName, sendFriendRequest, listenFriendRequests, acceptFriendRequest, rejectFriendRequest } from "@/lib/friends";
 import { createPrivateRoom } from "@/lib/privateRooms";
@@ -26,6 +27,15 @@ export default function FriendsList() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  // Modal state
+  const [modal, setModal] = useState<{
+    open: boolean;
+    title?: string;
+    message?: string;
+    input?: boolean;
+    placeholder?: string;
+    onSubmit?: (value?: string) => void;
+  }>({ open: false });
 
   useEffect(() => {
     if (!user) return;
@@ -71,24 +81,44 @@ export default function FriendsList() {
     }
   };
 
-  const addFriend = async () => {
-    const name = prompt("Enter friend's display name:");
-    if (!name || !user) return;
-
-    try {
-      // Find user by display name - this is simplistic, assumes unique names
-      // In real app, need better search
-      const usersSnap = await getDocs(query(collection(db, "users"), where("customDisplayName", "==", name)));
-      if (usersSnap.empty) {
-        alert("User not found");
-        return;
+  const addFriend = () => {
+    setModal({
+      open: true,
+      title: "Add Friend",
+      message: "Enter your friend's display name:",
+      input: true,
+      placeholder: "Display name",
+      onSubmit: async (name) => {
+        if (!name || !user) return;
+        try {
+          const usersSnap = await getDocs(query(collection(db, "users"), where("customDisplayName", "==", name)));
+          if (usersSnap.empty) {
+            setModal({
+              open: true,
+              title: "User Not Found",
+              message: "No user found with that display name.",
+              onSubmit: () => setModal({ open: false })
+            });
+            return;
+          }
+          const friendId = usersSnap.docs[0].id;
+          await sendFriendRequest(user.uid, friendId);
+          setModal({
+            open: true,
+            title: "Success",
+            message: "Friend request sent!",
+            onSubmit: () => setModal({ open: false })
+          });
+        } catch (error: any) {
+          setModal({
+            open: true,
+            title: "Error",
+            message: "Error: " + error.message,
+            onSubmit: () => setModal({ open: false })
+          });
+        }
       }
-      const friendId = usersSnap.docs[0].id;
-      await sendFriendRequest(user.uid, friendId);
-      alert("Friend request sent!");
-    } catch (error: any) {
-      alert("Error: " + error.message);
-    }
+    });
   };
 
   const acceptRequest = async (requestId: string) => {
@@ -104,7 +134,12 @@ export default function FriendsList() {
       setFriends(friendData);
       setRequests(requests.filter(r => r.id !== requestId));
     } catch (error: any) {
-      alert("Error: " + error.message);
+      setModal({
+        open: true,
+        title: "Error",
+        message: "Error: " + error.message,
+        onSubmit: () => setModal({ open: false })
+      });
     }
   };
 
@@ -113,14 +148,29 @@ export default function FriendsList() {
       await rejectFriendRequest(requestId, user!.uid);
       setRequests(requests.filter(r => r.id !== requestId));
     } catch (error: any) {
-      alert("Error: " + error.message);
+      setModal({
+        open: true,
+        title: "Error",
+        message: "Error: " + error.message,
+        onSubmit: () => setModal({ open: false })
+      });
     }
   };
 
   if (!user) return null;
 
   return (
-    <div className="space-y-2">
+    <>
+      <AppModal
+        open={modal.open}
+        title={modal.title}
+        message={modal.message}
+        input={modal.input}
+        placeholder={modal.placeholder}
+        onClose={() => setModal({ open: false })}
+        onSubmit={modal.onSubmit}
+      />
+      <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="text-xs font-black uppercase tracking-widest text-zinc-600">Friends</div>
         <button
@@ -171,5 +221,6 @@ export default function FriendsList() {
         )}
       </div>
     </div>
+    </>
   );
 }
