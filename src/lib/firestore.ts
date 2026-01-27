@@ -72,7 +72,6 @@ export const createOrJoinRoom = async (topic: string, password?: string, userId?
 
       if (roomData.isLocked) {
         if (!password) throw new Error("PASSWORD_REQUIRED");
-        
         const isMatch = await bcrypt.compare(password, roomData.passwordHash);
         if (!isMatch) throw new Error("INVALID_PASSWORD");
       }
@@ -80,7 +79,8 @@ export const createOrJoinRoom = async (topic: string, password?: string, userId?
       return { id: roomDoc.id, ...roomData };
     }
 
-    // CREATE NEW ROOM
+    // Only create a new room if NO room exists with this slug
+    // (If a room exists but password is wrong, we already returned above)
     let passwordHash = null;
     if (password) {
       passwordHash = await bcrypt.hash(password, 10);
