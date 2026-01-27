@@ -1,0 +1,175 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { getFriends, getUserDisplayName, sendFriendRequest, listenFriendRequests, acceptFriendRequest, rejectFriendRequest } from "@/lib/friends";
+import { createPrivateRoom } from "@/lib/privateRooms";
+import { useRouter } from "next/navigation";
+import { MessageCircle, UserPlus, Check, X } from "lucide-react";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+interface Friend {
+  id: string;
+  name: string;
+}
+
+interface FriendRequest {
+  id: string;
+  from: string;
+  fromName: string;
+}
+
+export default function FriendsList() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const loadFriends = async () => {
+      try {
+        const friendIds = await getFriends(user.uid);
+        const friendData: Friend[] = [];
+        for (const id of friendIds) {
+          const name = await getUserDisplayName(id);
+          friendData.push({ id, name });
+        }
+        setFriends(friendData);
+      } catch (error) {
+        console.error("Error loading friends:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadFriends();
+
+    // Listen to friend requests
+    const unsub = listenFriendRequests(user.uid, async (reqs) => {
+      const reqData: FriendRequest[] = [];
+      for (const req of reqs) {
+        const name = await getUserDisplayName(req.from);
+        reqData.push({ id: req.id, from: req.from, fromName: name });
+      }
+      setRequests(reqData);
+    });
+
+    return unsub;
+  }, [user]);
+
+  const openPrivateChat = async (friendId: string) => {
+    if (!user) return;
+    try {
+      const roomId = await createPrivateRoom(user.uid, friendId);
+      router.push(`/private/${roomId}`);
+    } catch (error) {
+      console.error("Error opening private chat:", error);
+    }
+  };
+
+  const addFriend = async () => {
+    const name = prompt("Enter friend's display name:");
+    if (!name || !user) return;
+
+    try {
+      // Find user by display name - this is simplistic, assumes unique names
+      // In real app, need better search
+      const usersSnap = await getDocs(query(collection(db, "users"), where("customDisplayName", "==", name)));
+      if (usersSnap.empty) {
+        alert("User not found");
+        return;
+      }
+      const friendId = usersSnap.docs[0].id;
+      await sendFriendRequest(user.uid, friendId);
+      alert("Friend request sent!");
+    } catch (error: any) {
+      alert("Error: " + error.message);
+    }
+  };
+
+  const acceptRequest = async (requestId: string) => {
+    try {
+      await acceptFriendRequest(requestId, user!.uid);
+      // Reload friends
+      const friendIds = await getFriends(user!.uid);
+      const friendData: Friend[] = [];
+      for (const id of friendIds) {
+        const name = await getUserDisplayName(id);
+        friendData.push({ id, name });
+      }
+      setFriends(friendData);
+      setRequests(requests.filter(r => r.id !== requestId));
+    } catch (error: any) {
+      alert("Error: " + error.message);
+    }
+  };
+
+  const rejectRequest = async (requestId: string) => {
+    try {
+      await rejectFriendRequest(requestId, user!.uid);
+      setRequests(requests.filter(r => r.id !== requestId));
+    } catch (error: any) {
+      alert("Error: " + error.message);
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-black uppercase tracking-widest text-zinc-600">Friends</div>
+        <button
+          onClick={addFriend}
+          className="p-1 hover:bg-zinc-900/50 rounded"
+          title="Add Friend"
+        >
+          <UserPlus size={14} className="text-zinc-400" />
+        </button>
+      </div>
+
+      {/* Friend Requests */}
+      {requests.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-xs text-zinc-500">Requests:</div>
+          {requests.map((req) => (
+            <div key={req.id} className="flex items-center justify-between p-2 bg-zinc-900/30 rounded">
+              <span className="text-sm truncate">{req.fromName}</span>
+              <div className="flex gap-1">
+                <button onClick={() => acceptRequest(req.id)} className="p-1 hover:bg-green-500/20 rounded">
+                  <Check size={12} className="text-green-400" />
+                </button>
+                <button onClick={() => rejectRequest(req.id)} className="p-1 hover:bg-red-500/20 rounded">
+                  <X size={12} className="text-red-400" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="max-h-40 overflow-y-auto space-y-1">
+        {loading ? (
+          <div className="text-xs text-zinc-500">Loading...</div>
+        ) : friends.length === 0 ? (
+          <div className="text-xs text-zinc-500">No friends yet</div>
+        ) : (
+          friends.map((friend) => (
+            <button
+              key={friend.id}
+              onClick={() => openPrivateChat(friend.id)}
+              className="w-full flex items-center gap-3 p-2 hover:bg-zinc-900/50 rounded-lg transition-all text-left"
+            >
+              <MessageCircle size={14} className="text-blue-400" />
+              <span className="text-sm font-medium truncate">{friend.name}</span>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

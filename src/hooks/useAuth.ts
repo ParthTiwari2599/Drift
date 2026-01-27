@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
 import {
-  signInAnonymously,
   onAuthStateChanged,
   User,
   GoogleAuthProvider,
@@ -14,45 +13,15 @@ import {
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [hasInitialized, setHasInitialized] = useState(false);
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        const result = await signInAnonymously(auth);
-        setUser(result.user);
-      } catch (error) {
-        console.error("Anonymous auth error:", error);
-      } finally {
-        setLoading(false);
-        setHasInitialized(true);
-      }
-    };
-
-    // short timeout to start auth if no user yet
-    const timeout = setTimeout(() => {
-      if (!hasInitialized) {
-        initializeAuth();
-      }
-    }, 500);
-
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        setLoading(false);
-        setHasInitialized(true);
-      } else if (hasInitialized) {
-        // user signed out after init
-        setUser(null);
-        setLoading(false);
-      }
+      setUser(currentUser);
+      setLoading(false);
     });
 
-    return () => {
-      unsubscribe();
-      clearTimeout(timeout);
-    };
-  }, [hasInitialized]);
+    return () => unsubscribe();
+  }, []);
 
   const signInWithGoogle = async () => {
     try {

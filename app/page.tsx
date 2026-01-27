@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { createOrJoinRoom, getUserData, updateUserData } from "@/lib/firestore";
 import { db } from "@/lib/firebase";
-import { collection, query, where, limit, onSnapshot } from "firebase/firestore";
+import { collection, query, where, limit, onSnapshot, orderBy } from "firebase/firestore";
 import { listenToRoomPresenceUsers } from "@/lib/presence";
 import { Hash, Plus, Users, Zap, LogOut, Lock, Globe, Shield, ArrowRight, Activity, MessageSquare, EyeOff, Sparkles, Terminal, Menu, X, House, MessageCircle, Settings, User } from "lucide-react";
+import FriendsList from "@/components/FriendsList";
 
 interface Room {
   id: string;
@@ -84,7 +85,7 @@ export default function Home() {
   // Logic section (No changes here)
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "rooms"), where("active", "==", true), limit(10));
+    const q = query(collection(db, "rooms"), where("active", "==", true), orderBy("createdAt", "desc"), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const rooms = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -139,6 +140,10 @@ export default function Home() {
   };
 
   const findAndOpenRoom = async () => {
+    if (!user) {
+      alert("Please login first to join rooms");
+      return;
+    }
     const name = prompt("Enter room name to find:");
     if (!name) return;
     const password = prompt("Enter password if the room is protected (leave blank otherwise):");
@@ -153,6 +158,10 @@ export default function Home() {
   };
 
 const joinRoom = async (room: Room) => {
+  if (!user) {
+    alert("Please login first to join rooms");
+    return;
+  }
   setIsMobileMenuOpen(false);
   
   if (room.isLocked) {
@@ -186,7 +195,7 @@ const joinRoom = async (room: Room) => {
           </div>
           
           {/* User Status */}
-          {user ? (
+          {user && !user.isAnonymous ? (
             <div className="space-y-4">
               <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
                 <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
@@ -220,12 +229,15 @@ const joinRoom = async (room: Room) => {
         <div className="flex-1 p-8 space-y-2">
           <div className="text-xs font-black uppercase tracking-widest text-zinc-600 mb-4">Navigation</div>
           
-          <button className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left">
+          <button 
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+          >
             <House size={16} className="text-blue-400" />
             <span className="text-sm font-medium">Home</span>
           </button>
 
-          {user && (
+          {user && !user.isAnonymous && (
             <>
               <button 
                 onClick={() => {
@@ -248,6 +260,8 @@ const joinRoom = async (room: Room) => {
               </button>
             </>
           )}
+
+          {user && !user.isAnonymous && <FriendsList />}
 
           <div className="pt-4 border-t border-zinc-800/50 mt-8">
             <button 
@@ -281,7 +295,7 @@ const joinRoom = async (room: Room) => {
           
           {/* Desktop Navigation */}
           <div className="hidden sm:flex items-center gap-4">
-            {user ? (
+            {user && !user.isAnonymous ? (
               <button onClick={signOut} className="text-[10px] font-black uppercase tracking-widest border border-white/10 px-6 py-2 rounded-full hover:bg-red-500/10 transition-all">Disconnect</button>
             ) : (
               <button onClick={signInWithGoogle} className="bg-white text-black text-[10px] font-black uppercase tracking-widest px-6 py-2 rounded-full">Secure Auth</button>
@@ -326,7 +340,7 @@ const joinRoom = async (room: Room) => {
 
               {/* User Status */}
               <div className="mb-8">
-                {user ? (
+                {user && !user.isAnonymous ? (
                   <div className="space-y-4">
                     <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
                       <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
@@ -360,12 +374,18 @@ const joinRoom = async (room: Room) => {
               <div className="flex-1 space-y-2">
                 <div className="text-xs font-black uppercase tracking-widest text-zinc-600 mb-4">Navigation</div>
                 
-                <button className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left">
+                <button 
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                >
                   <House size={16} className="text-blue-400" />
                   <span className="text-sm font-medium">Home</span>
                 </button>
 
-                {user && (
+                {user && !user.isAnonymous && (
                   <>
                     <button 
                       onClick={() => {
@@ -392,6 +412,8 @@ const joinRoom = async (room: Room) => {
                     </button>
                   </>
                 )}
+
+                {user && <FriendsList />}
 
                 <button 
                   onClick={() => {
@@ -426,14 +448,14 @@ const joinRoom = async (room: Room) => {
             <p className="text-zinc-500 text-lg sm:text-xl max-w-md font-medium">
               DRIFT is an ephemeral communication layer where messages don't last, but impact does. 
             </p>
-            {!user && (
+            {!user || user.isAnonymous && (
                 <button onClick={signInWithGoogle} className="flex items-center gap-3 sm:gap-4 bg-blue-600 px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-105 transition-all">
                     Start Drifting <ArrowRight size={20} />
                 </button>
             )}
           </div>
 
-          {user && (
+          {user && !user.isAnonymous && (
             <div id="create-room" className="bg-zinc-900/30 border border-white/5 p-6 sm:p-8 md:p-12 rounded-[2rem] sm:rounded-[3rem] backdrop-blur-xl shadow-2xl w-full max-w-lg mx-auto lg:mx-0">
                <h2 className="text-lg sm:text-xl font-black uppercase tracking-widest mb-6 sm:mb-8 flex items-center gap-3">
                  <Terminal size={20} className="text-blue-500" /> New Signal
@@ -502,6 +524,7 @@ const joinRoom = async (room: Room) => {
       </div>
 
       {/* --- LIVE NETWORK SECTION --- */}
+      {user && !user.isAnonymous && (
       <section id="active-rooms" className="max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-32">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 sm:mb-12 gap-4 sm:gap-6">
             <div className="space-y-2">
@@ -538,6 +561,7 @@ const joinRoom = async (room: Room) => {
             ))}
         </div>
       </section>
+      )}
 
       {/* --- "WHAT IS DRIFT" SECTION (THE STORY) --- */}
       <section className="bg-white/5 py-16 sm:py-32 border-y border-white/5">
@@ -716,7 +740,7 @@ const joinRoom = async (room: Room) => {
          
          {/* Mobile-friendly copyright */}
          <div className="text-center">
-            <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.4em] text-zinc-700">© 2024 ZERO_LOG_SYSTEMS_LLC</p>
+            <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.4em] text-zinc-700">© 2026 ZERO_LOG_SYSTEMS_LLC</p>
          </div>
       </footer>
 

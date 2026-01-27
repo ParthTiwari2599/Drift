@@ -57,6 +57,8 @@ import {
     Settings,
     User,
     LogOut,
+    Mic,
+    MicOff,
 } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 
@@ -99,8 +101,13 @@ export default function RoomPage() {
     const [newConnectionUser, setNewConnectionUser] = useState<string | null>(null);
     const [animationTriggered, setAnimationTriggered] = useState(false);
     const [prevPrivateRoomsLength, setPrevPrivateRoomsLength] = useState(0);
+    const [isRecording, setIsRecording] = useState(false);
+    const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+    // No React state for chunks: use local variable
+    let localChunks: BlobPart[] = [];
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
+    const welcomeSentRef = useRef(false);
 
     // LOGIC: Unchanged (As requested)
     useEffect(() => {
@@ -146,6 +153,23 @@ export default function RoomPage() {
             clearInterval(hb);
         };
     }, [roomId, user]);
+
+    // Send welcome message if room is empty
+    useEffect(() => {
+        if (messages.length === 0 && user && roomId && roomData && !welcomeSentRef.current) {
+            welcomeSentRef.current = true;
+            const welcomeMessage = `🎉 Welcome to DRIFT Room! 🎉
+
+🚫 Please do NOT take anyone to Instagram or other platforms from here.
+🌟 Enjoy this secure, ephemeral messaging experience.
+📝 Give us feedback to improve DRIFT!
+
+Your messages disappear after 2 hours for privacy. 💫`;
+
+            // Send as system message
+            sendMessageToRoom(roomId as string, welcomeMessage, "system", "text", "never");
+        }
+    }, [messages.length, user, roomId, roomData]);
 
     useEffect(() => {
         const unsubs = privateRooms.map((room) =>
@@ -287,6 +311,15 @@ export default function RoomPage() {
         }
     }, [activeUsers, user, sentRequests, incomingRequests]);
 
+    const blobToBase64 = (blob: Blob): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    };
+
     const handleSend = async () => {
         if (!user || !input.trim()) return;
         const msgText = input;
@@ -315,6 +348,93 @@ export default function RoomPage() {
                 setInput(msgText);
                 setReplyingTo(replyData);
             }
+        }
+    };
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    sampleRate: 16000,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                }
+            });
+            const recorder = new MediaRecorder(stream, {
+                mimeType: 'audio/webm;codecs=opus',
+            });
+            localChunks = []; // HARD RESET
+
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    localChunks.push(event.data); // local buffer
+                }
+            };
+
+            recorder.onstop = async () => {
+                const audioBlob = new Blob(localChunks, { type: 'audio/webm' });
+                try {
+                    await sendVoiceNote(audioBlob); // direct blob
+                } catch (e) {
+                    console.error("Voice send failed", e);
+                }
+                stream.getTracks().forEach(track => track.stop());
+                localChunks = [];
+            };
+
+            recorder.start();
+            setMediaRecorder(recorder);
+            setIsRecording(true);
+
+            setTimeout(() => {
+                if (recorder.state === "recording") {
+                    recorder.stop();
+                    setIsRecording(false);
+                }
+            }, 30000);
+        } catch (error) {
+            console.error('Error starting recording:', error);
+            alert('Could not access microphone');
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorder && mediaRecorder.state === "recording") {
+            mediaRecorder.stop();
+            setIsRecording(false);
+        }
+    };
+
+    const sendVoiceNote = async (audioBlob: Blob) => {
+        if (!user) return;
+        const replyData = replyingTo;
+        setReplyingTo(null);
+        // create object URL instead of base64
+        const audioURL = URL.createObjectURL(audioBlob);
+        try {
+            if (currentChat === "group") {
+                await sendMessageToRoom(
+                    roomId as string,
+                    audioURL,
+                    user.uid,
+                    "voice",
+                    "never",
+                    replyData
+                );
+            } else {
+                await sendPrivateMessage(
+                    currentChat,
+                    audioURL,
+                    user.uid,
+                    "voice",
+                    "never",
+                    replyData
+                );
+            }
+        } catch (error) {
+            console.error("Failed to send voice note:", error);
+            alert("Failed to send voice note");
         }
     };
 
@@ -433,7 +553,7 @@ export default function RoomPage() {
             </div>
         );
 
-    if (!user)
+    if (!user || user.isAnonymous)
         return (
             <div className="h-screen bg-black flex items-center justify-center">
                 <div className="border border-red-900/50 bg-red-950/10 p-8 rounded-3xl text-center">
@@ -897,8 +1017,22 @@ export default function RoomPage() {
                                 )
                                 .map((msg, i) => {
                                     const isMe = msg.userId === user.uid;
+                                    const isSystem = msg.userId === "system";
                                     const senderName =
                                         userNames[msg.userId] || `User ${msg.userId?.slice(-4)}`;
+                                    
+                                    if (isSystem) {
+                                        return (
+                                            <div key={msg.id || i} className="flex justify-center animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                                <div className="max-w-[80%] bg-zinc-800/50 border border-zinc-700/50 rounded-2xl p-4 text-center">
+                                                    <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+                                                        {msg.text}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    
                                     return (
                                         <div
                                             key={msg.id || i}
@@ -964,7 +1098,14 @@ export default function RoomPage() {
                                                         : "bg-zinc-900/50 text-zinc-200 rounded-tl-none border border-zinc-800/50 hover:bg-zinc-900 transition-colors"
                                                         }`}
                                                 >
-                                                    {msg.text}
+                                                    {msg.type === "voice" ? (
+                                                        <audio controls className="max-w-full h-8">
+                                                            <source src={msg.text} type="audio/webm" />
+                                                            Your browser does not support audio playback.
+                                                        </audio>
+                                                    ) : (
+                                                        msg.text
+                                                    )}
                                                 </div>
                                                 <div
                                                     className={`mt-1 sm:mt-2 flex items-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-300 ${isMe ? "justify-end" : "justify-start"
@@ -1164,6 +1305,13 @@ export default function RoomPage() {
                                         onKeyDown={(e) => e.key === "Enter" && handleSend()}
                                         placeholder="Transmit data..."
                                     />
+                                    <button
+                                        onClick={isRecording ? stopRecording : startRecording}
+                                        className={`text-zinc-400 hover:text-red-400 transition-colors p-1 sm:p-2 ${isRecording ? 'text-red-500 animate-pulse' : ''}`}
+                                        title={isRecording ? "Stop recording" : "Start voice recording"}
+                                    >
+                                        {isRecording ? <MicOff size={18} className="sm:w-5 sm:h-5" /> : <Mic size={18} className="sm:w-5 sm:h-5" />}
+                                    </button>
                                     <button
                                         onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                                         className="text-zinc-400 hover:text-zinc-200 transition-colors p-1 sm:p-2"

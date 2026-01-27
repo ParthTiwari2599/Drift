@@ -8,7 +8,7 @@ import { updateUserDisplayName } from "@/lib/privateRooms";
 import { getUserData, updateUserData } from "@/lib/firestore";
 import { doc, getDoc, onSnapshot, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Send, ChevronLeft, ShieldCheck, Lock, Cpu, Zap, Settings, Smile, Trash2, Menu, X, House, MessageCircle, User, LogOut, Shield } from "lucide-react";
+import { Send, ChevronLeft, ShieldCheck, Lock, Cpu, Zap, Settings, Smile, Trash2, Menu, X, House, MessageCircle, User, LogOut, Shield, Mic, MicOff } from "lucide-react";
 import EmojiPicker from 'emoji-picker-react';
 
 export default function PrivateRoomPage() {
@@ -28,7 +28,11 @@ export default function PrivateRoomPage() {
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [tempDisplayName, setTempDisplayName] = useState("");
     const [selectedAvatar, setSelectedAvatar] = useState("");
+    const [isRecording, setIsRecording] = useState(false);
+    const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+    const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
     const bottomRef = useRef<HTMLDivElement | null>(null);
+    const welcomeSentRef = useRef(false);
 
     // LOGIC: Unchanged
     useEffect(() => {
@@ -76,6 +80,32 @@ export default function PrivateRoomPage() {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
+    // Send welcome message if chat is empty
+    useEffect(() => {
+        if (messages.length === 0 && user && roomId && roomData && !welcomeSentRef.current) {
+            welcomeSentRef.current = true;
+            const welcomeMessage = `🎉 Welcome to DRIFT Private Chat! 🎉
+
+🚫 Please do NOT take anyone to Instagram or other platforms from here.
+🌟 Enjoy this secure, ephemeral messaging experience.
+📝 Give us feedback to improve DRIFT!
+
+Your messages disappear after 2 hours for privacy. 💫`;
+
+            // Send as system message
+            sendPrivateMessage(roomId as string, welcomeMessage, "system", "text", "never");
+        }
+    }, [messages.length, user, roomId, roomData]);
+
+    const blobToBase64 = (blob: Blob): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    };
+
     const handleSend = async () => {
         if (!input.trim() || !user || !roomId) return;
 
@@ -100,6 +130,75 @@ export default function PrivateRoomPage() {
             if (error.message?.includes("No internet connection")) {
                 setInput(msgText);
             }
+        }
+    };
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    sampleRate: 16000, // Lower sample rate for smaller files
+                    channelCount: 1, // Mono audio
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                }
+            });
+            const recorder = new MediaRecorder(stream, {
+                mimeType: 'audio/webm;codecs=opus', // More compressed format
+            });
+            setMediaRecorder(recorder);
+            setRecordedChunks([]);
+
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    setRecordedChunks((prev) => [...prev, event.data]);
+                }
+            };
+
+            recorder.onstop = async () => {
+                const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+                await sendVoiceNote(audioBlob);
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            recorder.start();
+            setIsRecording(true);
+
+            // Auto-stop after 30 seconds to prevent huge files
+            setTimeout(() => {
+                if (recorder.state === 'recording') {
+                    recorder.stop();
+                }
+            }, 30000);
+        } catch (error) {
+            console.error('Error starting recording:', error);
+            alert('Could not access microphone');
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorder && isRecording) {
+            mediaRecorder.stop();
+            setIsRecording(false);
+        }
+    };
+
+    const sendVoiceNote = async (audioBlob: Blob) => {
+        if (!user || !roomId) return;
+
+        try {
+            // Convert blob to base64 for storage
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const base64Audio = reader.result as string;
+                setInput("");
+
+                await sendPrivateMessage(roomId as string, base64Audio, user.uid, "voice");
+            };
+            reader.readAsDataURL(audioBlob);
+        } catch (error) {
+            console.error("Failed to send voice note:", error);
+            alert("Failed to send voice note");
         }
     };
 
@@ -143,6 +242,22 @@ export default function PrivateRoomPage() {
         <div className="h-screen bg-[#050505] flex flex-col items-center justify-center space-y-4">
             <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
             <div className="text-blue-500 font-mono text-[10px] uppercase tracking-[0.4em] animate-pulse">Decrypting Session...</div>
+        </div>
+    );
+
+    if (!user || user.isAnonymous) return (
+        <div className="h-screen bg-black flex items-center justify-center">
+            <div className="border border-red-900/50 bg-red-950/10 p-8 rounded-3xl text-center">
+                <p className="text-red-500 font-mono text-xs uppercase tracking-widest">
+                    Authentication Required
+                </p>
+                <button
+                    onClick={() => router.push("/")}
+                    className="mt-4 text-white bg-red-600 px-6 py-2 rounded-xl text-xs font-bold uppercase"
+                >
+                    Go Back
+                </button>
+            </div>
         </div>
     );
 
@@ -473,7 +588,21 @@ export default function PrivateRoomPage() {
                 
                 {messages.map((msg, i) => {
                     const isMe = msg.userId === user?.uid;
+                    const isSystem = msg.userId === "system";
                     const displayName = userNames[msg.userId] || (isMe ? 'You' : `User ${msg.userId?.slice(-4)}`);
+                    
+                    if (isSystem) {
+                        return (
+                            <div key={msg.id || i} className="flex justify-center animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                <div className="max-w-[80%] bg-zinc-800/50 border border-zinc-700/50 rounded-2xl p-4 text-center">
+                                    <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+                                        {msg.text}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+                    
                     return (
                         <div key={msg.id || i} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
                             <div className={`max-w-[75%] md:max-w-[60%] group`}>
@@ -487,7 +616,14 @@ export default function PrivateRoomPage() {
                                     ? 'bg-blue-600 text-white rounded-tr-none hover:shadow-[0_10px_30px_rgba(59,130,246,0.2)]' 
                                     : 'bg-zinc-900 text-zinc-200 rounded-tl-none border border-zinc-800/50 hover:bg-zinc-800/80'
                                 }`}>
-                                    <p>{msg.text}</p>
+                                    {msg.type === "voice" ? (
+                                        <audio controls className="max-w-full h-8">
+                                            <source src={msg.text} type="audio/webm" />
+                                            Your browser does not support audio playback.
+                                        </audio>
+                                    ) : (
+                                        <p>{msg.text}</p>
+                                    )}
                                 </div>
                                 <div className={`mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-40 transition-opacity ${isMe ? 'justify-end' : 'justify-start'}`}>
                                     <span className="text-[8px] font-black uppercase tracking-tighter text-zinc-500">
@@ -531,6 +667,13 @@ export default function PrivateRoomPage() {
                         onKeyDown={(e) => e.key === "Enter" && handleSend()}
                         placeholder="Secure transmission..."
                     />
+                    <button 
+                        onClick={isRecording ? stopRecording : startRecording}
+                        className={`text-zinc-400 hover:text-red-400 transition-colors p-2 ${isRecording ? 'text-red-500 animate-pulse' : ''}`}
+                        title={isRecording ? "Stop recording" : "Start voice recording"}
+                    >
+                        {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
+                    </button>
                     <button 
                         onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                         className="text-zinc-400 hover:text-zinc-200 transition-colors p-2"

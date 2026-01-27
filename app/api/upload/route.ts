@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
     const uploadResponse = await cloudinary.uploader.upload(file, {
       folder: "drift-chat",
-      resource_type: "image",
+      resource_type: body.resourceType || "image", // Allow specifying resource type
     });
 
     return NextResponse.json({

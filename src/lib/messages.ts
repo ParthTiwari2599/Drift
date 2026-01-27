@@ -60,7 +60,7 @@ export const sendMessageToRoom = async (
   topic: string,
   text: string,
   userId: string,
-  type: "text" | "image" | "emoji" | "sticker" = "text",
+  type: "text" | "image" | "emoji" | "sticker" | "voice" = "text",
   deleteMode?: "never" | "seen" | "24h" | "2h",
   replyTo?: any
 ) => {
@@ -72,16 +72,21 @@ export const sendMessageToRoom = async (
     const now = Date.now();
     const expireAt = deleteMode === "2h" ? Timestamp.fromMillis(now + 2 * 60 * 60 * 1000) : null;
 
-    await addDoc(collection(db, "messages"), {
+    const messageData: any = {
       roomId: topic, // topic = roomId
       text,
       userId,
       type,
       deleteMode: deleteMode || "2h", // group default 2h
       expireAt,
-      replyTo,
       createdAt: serverTimestamp(),
-    });
+    };
+
+    if (replyTo) {
+      messageData.replyTo = replyTo;
+    }
+
+    await addDoc(collection(db, "messages"), messageData);
   });
 };
 

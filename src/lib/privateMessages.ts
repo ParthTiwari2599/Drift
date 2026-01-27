@@ -15,7 +15,7 @@ export const sendPrivateMessage = async (
   roomId: string,
   text: string,
   userId: string,
-  type: "text" | "image" | "emoji" | "sticker" = "text",
+  type: "text" | "image" | "emoji" | "sticker" | "voice" = "text",
   deleteMode: "never" | "seen" | "24h" | "2h" = "2h",
   replyTo?: any
 ) => {
@@ -28,7 +28,7 @@ export const sendPrivateMessage = async (
     expireAt = Timestamp.fromMillis(now + 24 * 60 * 60 * 1000);
   }
 
-  await addDoc(collection(db, "messages"), {
+  const messageData: any = {
     roomId,
     text,
     userId,
@@ -36,9 +36,14 @@ export const sendPrivateMessage = async (
     deleteMode,
     seenBy: [],
     expireAt,
-    replyTo,
     createdAt: serverTimestamp(),
-  });
+  };
+
+  if (replyTo) {
+    messageData.replyTo = replyTo;
+  }
+
+  await addDoc(collection(db, "messages"), messageData);
 };
 
 // 🔥 Listen private messages
