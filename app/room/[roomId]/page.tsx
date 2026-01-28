@@ -264,8 +264,10 @@ export default function RoomPage() {
             setUserNames((prev) => ({ ...prev, ...names }));
             setUserAvatars((prev) => ({ ...prev, ...avatars }));
         };
+        // Always reload names for all active users, even if already present
         if (activeUsers.length > 0) {
-            loadUserNames();
+            setUserNames({}); // Clear cache to force full reload
+            await loadUserNames();
         }
     }, [activeUsers, user]);
 
