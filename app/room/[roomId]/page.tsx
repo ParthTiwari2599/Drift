@@ -213,7 +213,7 @@ export default function RoomPage() {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, privateMessages, currentChat]);
 
-    // Load user display names for all active users
+    // Load user display names for all active users and auto-save Google name if missing
     useEffect(() => {
         const loadUserNames = async () => {
             const names: { [uid: string]: string } = {};
@@ -244,6 +244,13 @@ export default function RoomPage() {
             if (user?.uid) {
                 try {
                     const userData = await getUserData(user.uid);
+                    // If no customDisplayName, but Google displayName exists, save it
+                    if (!userData?.customDisplayName && user.displayName) {
+                        await updateUserData(user.uid, { customDisplayName: user.displayName });
+                        names[user.uid] = user.displayName;
+                    } else if (userData?.customDisplayName) {
+                        names[user.uid] = userData.customDisplayName;
+                    }
                     if (userData?.customAvatar) {
                         avatars[user.uid] = userData.customAvatar;
                     } else {
