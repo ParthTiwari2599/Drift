@@ -34,7 +34,7 @@ export default function FriendsList() {
       const friendIds = data?.friends || [];
       // Only update if friendIds actually changed
       const last = lastFriendIdsRef.current;
-      if (friendIds.length === last.length && friendIds.every((id, i) => id === last[i])) {
+      if (friendIds.length === last.length && friendIds.every((id: string, i: number) => id === last[i])) {
         setLoading(false);
         return;
       }
