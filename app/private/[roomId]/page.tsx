@@ -94,7 +94,7 @@ export default function PrivateRoomPage() {
 Your messages disappear after 2 hours for privacy. 💫`;
 
             // Send as system message
-            sendPrivateMessage(roomId as string, welcomeMessage, "system", "text", "never");
+            sendPrivateMessage(roomId as string, welcomeMessage, "system", "text", "2h");
         }
     }, [messages.length, user, roomId, roomData]);
 
