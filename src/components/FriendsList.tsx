@@ -45,6 +45,10 @@ export default function FriendsList() {
     const unsubUser = onSnapshot(userRef, async (snap) => {
       const data = snap.data();
       const friendIds = data?.friends || [];
+      // DEBUG: print friendIds
+      if (typeof window !== 'undefined') {
+        console.log('FRIENDS ARRAY:', friendIds);
+      }
       const friendData: Friend[] = [];
       for (const id of friendIds) {
         const name = await getUserDisplayName(id);

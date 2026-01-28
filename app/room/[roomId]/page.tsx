@@ -131,9 +131,9 @@ export default function RoomPage() {
             listenSentRequests(user.uid, setSentRequests),
             listenMyPrivateRooms(user.uid, setPrivateRooms),
             listenAcceptedRequests(user.uid, (reqs) => {
-                if (reqs.length > 0 && reqs[0].privateRoomId) {
+                // Only show animation if this is a new accept, not on reload
+                if (reqs.length > 0 && reqs[0].privateRoomId && !animationTriggered) {
                     setCurrentChat(reqs[0].privateRoomId);
-                    // Trigger connection animation
                     const otherUserId = reqs[0].fromUser === user.uid ? reqs[0].toUser : reqs[0].fromUser;
                     const otherUserName = userNames[otherUserId] || `User ${otherUserId.slice(-4)}`;
                     setNewConnectionUser(otherUserName);
@@ -142,7 +142,7 @@ export default function RoomPage() {
                     setTimeout(() => {
                         setShowConnectionAnimation(false);
                         setAnimationTriggered(false);
-                    }, 2500); // Hide after 2.5 seconds
+                    }, 2500);
                 }
             }),
         ];
@@ -153,39 +153,25 @@ export default function RoomPage() {
             leaveRoomPresence(roomId as string, user.uid);
             clearInterval(hb);
         };
-    }, [roomId, user]);
+    }, [roomId, user, animationTriggered]);
 
-    // Send welcome message if not already present, only once per user per room
+    // Send welcome message only once per user per room, and only to the joining user (not to all group)
     useEffect(() => {
-        if (!user || !roomId || !roomData || !Array.isArray(messages) || welcomeSentRef.current) return;
+        if (!user || !roomId || !roomData || welcomeSentRef.current) return;
         const welcomeKey = `drift_welcome_sent_${roomId}_${user.uid}`;
-        if (typeof window !== 'undefined' && localStorage.getItem(welcomeKey)) {
+        if (typeof window !== 'undefined' && sessionStorage.getItem(welcomeKey)) {
             welcomeSentRef.current = true;
             return;
         }
-
-        // If there are messages, check if welcome message exists
-        if (messages.length > 0) {
-            const welcomeExists = messages.some(
-                (msg) => msg.userId === 'system' && typeof msg.text === 'string' && msg.text.includes('Welcome to DRIFT Room')
-            );
-            if (welcomeExists) {
-                if (typeof window !== 'undefined') {
-                    localStorage.setItem(welcomeKey, '1');
-                }
-                welcomeSentRef.current = true;
-            }
-            return;
-        }
-
-        // If no messages, send updated welcome message
-        const welcomeMessage = `🕶️ The room is active.\n\nYou've entered a temporary zone. Once the clock hits 2 hours, this conversation is gone forever.\n\n🔒 The Golden Rule: Don't ruin the mystery—avoid taking people to Instagram. Real connections don't need a follow button. ✍️ Co-create DRIFT: Tell us what you think. We’re listening.`;
-        sendMessageToRoom(roomId as string, welcomeMessage, "system", "text", "never");
+        // Only show welcome message locally (not send to group)
+        setTimeout(() => {
+            alert("🕶️ The room is active.\n\nYou've entered a temporary zone. Once the clock hits 2 hours, this conversation is gone forever.\n\n🔒 The Golden Rule: Don't ruin the mystery—avoid taking people to Instagram. Real connections don't need a follow button. ✍️ Co-create DRIFT: Tell us what you think. We’re listening.");
+        }, 500);
         if (typeof window !== 'undefined') {
-            localStorage.setItem(welcomeKey, '1');
+            sessionStorage.setItem(welcomeKey, '1');
         }
         welcomeSentRef.current = true;
-    }, [messages, user, roomId, roomData]);
+    }, [user, roomId, roomData]);
 
     useEffect(() => {
         const unsubs = privateRooms.map((room) =>
