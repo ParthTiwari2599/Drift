@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import { AppModal } from "@/components/AppModal";
 import { useAuth } from "@/hooks/useAuth";
-import { getFriends, getUserDisplayName, sendFriendRequest, listenFriendRequests, acceptFriendRequest, rejectFriendRequest } from "@/lib/friends";
+import { getUserDisplayName, sendFriendRequest, listenFriendRequests, acceptFriendRequest, rejectFriendRequest } from "@/lib/friends";
 import { createPrivateRoom } from "@/lib/privateRooms";
 import { useRouter } from "next/navigation";
 import { MessageCircle, UserPlus, Check, X } from "lucide-react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 interface Friend {
@@ -39,27 +39,23 @@ export default function FriendsList() {
 
   useEffect(() => {
     if (!user) return;
-
-    const loadFriends = async () => {
-      try {
-        const friendIds = await getFriends(user.uid);
-        const friendData: Friend[] = [];
-        for (const id of friendIds) {
-          const name = await getUserDisplayName(id);
-          friendData.push({ id, name });
-        }
-        setFriends(friendData);
-      } catch (error) {
-        console.error("Error loading friends:", error);
-      } finally {
-        setLoading(false);
+    setLoading(true);
+    // Real-time listener for friends array
+    const userRef = doc(db, "users", user.uid);
+    const unsubUser = onSnapshot(userRef, async (snap) => {
+      const data = snap.data();
+      const friendIds = data?.friends || [];
+      const friendData: Friend[] = [];
+      for (const id of friendIds) {
+        const name = await getUserDisplayName(id);
+        friendData.push({ id, name });
       }
-    };
-
-    loadFriends();
+      setFriends(friendData);
+      setLoading(false);
+    });
 
     // Listen to friend requests
-    const unsub = listenFriendRequests(user.uid, async (reqs) => {
+    const unsubReq = listenFriendRequests(user.uid, async (reqs) => {
       const reqData: FriendRequest[] = [];
       for (const req of reqs) {
         const name = await getUserDisplayName(req.from);
@@ -68,7 +64,10 @@ export default function FriendsList() {
       setRequests(reqData);
     });
 
-    return unsub;
+    return () => {
+      unsubUser();
+      unsubReq();
+    };
   }, [user]);
 
   const openPrivateChat = async (friendId: string) => {

@@ -31,7 +31,7 @@ import { listenMyPrivateRooms } from "@/lib/privateRooms";
 import { sendPrivateMessage, listenPrivateMessages } from "@/lib/privateMessages";
 import { deleteRoom } from "@/lib/firestore";
 import { db, generateRandomAvatar, generateAvatarFromName } from "@/lib/firebase";
-import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, where, getDocs, deleteDoc, doc, onSnapshot } from "firebase/firestore";
 import {
     Send,
     Users,
@@ -213,63 +213,29 @@ export default function RoomPage() {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, privateMessages, currentChat]);
 
-    // Load user display names for all active users and auto-save Google name if missing
+    // Real-time display names for all active users
     useEffect(() => {
-        const loadUserNames = async () => {
-            const names: { [uid: string]: string } = {};
-            const avatars: { [uid: string]: string } = {};
-
-            for (const activeUser of activeUsers) {
-                if (activeUser.userId && activeUser.userId !== user?.uid) {
-                    try {
-                        const userData = await getUserData(activeUser.userId);
-                        if (userData?.customDisplayName) {
-                            names[activeUser.userId] = userData.customDisplayName;
-                        } else {
-                            names[activeUser.userId] = `User ${activeUser.userId.slice(-4)}`;
-                        }
-
-                        if (userData?.customAvatar) {
-                            avatars[activeUser.userId] = userData.customAvatar;
-                        } else {
-                            avatars[activeUser.userId] = generateRandomAvatar(activeUser.userId);
-                        }
-                    } catch (error) {
-                        names[activeUser.userId] = `User ${activeUser.userId.slice(-4)}`;
-                        avatars[activeUser.userId] = generateRandomAvatar(activeUser.userId);
-                    }
+        if (!activeUsers.length) return;
+        const unsubscribes: Array<() => void> = [];
+        let isMounted = true;
+        activeUsers.forEach((u) => {
+            if (!u.userId) return;
+            const unsub = onSnapshot(
+                doc(db, "users", u.userId),
+                (snap) => {
+                    const data = snap.data();
+                    const name = data?.customDisplayName || data?.displayName || data?.email || `User ${u.userId?.slice(-4)}`;
+                    if (isMounted) setUserNames((prev) => ({ ...prev, [u.userId]: name }));
+                    // Avatar update (optional, can be added similarly)
                 }
-            }
-
-            if (user?.uid) {
-                try {
-                    const userData = await getUserData(user.uid);
-                    // If no customDisplayName, but Google displayName exists, save it
-                    if (!userData?.customDisplayName && user.displayName) {
-                        await updateUserData(user.uid, { customDisplayName: user.displayName });
-                        names[user.uid] = user.displayName;
-                    } else if (userData?.customDisplayName) {
-                        names[user.uid] = userData.customDisplayName;
-                    }
-                    if (userData?.customAvatar) {
-                        avatars[user.uid] = userData.customAvatar;
-                    } else {
-                        avatars[user.uid] = generateRandomAvatar(user.uid);
-                    }
-                } catch (error) {
-                    avatars[user.uid] = generateRandomAvatar(user.uid);
-                }
-            }
-
-            setUserNames((prev) => ({ ...prev, ...names }));
-            setUserAvatars((prev) => ({ ...prev, ...avatars }));
+            );
+            unsubscribes.push(unsub);
+        });
+        return () => {
+            isMounted = false;
+            unsubscribes.forEach((unsub) => unsub());
         };
-        // Always reload names for all active users, even if already present
-        if (activeUsers.length > 0) {
-            setUserNames({}); // Clear cache to force full reload
-            await loadUserNames();
-        }
-    }, [activeUsers, user]);
+    }, [activeUsers]);
 
     // Load connection statuses for all active users
     useEffect(() => {
