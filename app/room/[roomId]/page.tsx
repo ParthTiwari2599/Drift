@@ -2,6 +2,14 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
+// Debounce utility
+function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
+    let timer: NodeJS.Timeout;
+    return (...args: Parameters<T>) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), delay);
+    };
+}
 import { AppModal } from "@/components/AppModal";
 import { getRoom, getUserData, updateUserData } from "@/lib/firestore";
 import {
@@ -64,6 +72,8 @@ import {
 import EmojiPicker from "emoji-picker-react";
 
 export default function RoomPage() {
+    // Track which accepted connection IDs have already shown animation
+    const shownConnectionIdsRef = useRef<Set<string>>(new Set());
     const { roomId } = useParams();
     const router = useRouter();
     const { user } = useAuth();
@@ -123,26 +133,32 @@ export default function RoomPage() {
 
     useEffect(() => {
         if (!roomId || !user) return;
+        // Debounced setter for active users
+        const debouncedSetActiveUsers = debounce(setActiveUsers, 300);
         const unsubs = [
             listenToRoomMessages(roomId as string, setMessages),
             listenToRoomPresence(roomId as string, setActiveCount),
-            listenToRoomPresenceUsers(roomId as string, setActiveUsers),
+            listenToRoomPresenceUsers(roomId as string, debouncedSetActiveUsers),
             listenIncomingRequests(user.uid, setIncomingRequests),
             listenSentRequests(user.uid, setSentRequests),
             listenMyPrivateRooms(user.uid, setPrivateRooms),
             listenAcceptedRequests(user.uid, (reqs) => {
-                // Only show animation if this is a new accept, not on reload
-                if (reqs.length > 0 && reqs[0].privateRoomId && !animationTriggered) {
-                    setCurrentChat(reqs[0].privateRoomId);
-                    const otherUserId = reqs[0].fromUser === user.uid ? reqs[0].toUser : reqs[0].fromUser;
-                    const otherUserName = userNames[otherUserId] || `User ${otherUserId.slice(-4)}`;
-                    setNewConnectionUser(otherUserName);
-                    setShowConnectionAnimation(true);
-                    setAnimationTriggered(true);
-                    setTimeout(() => {
-                        setShowConnectionAnimation(false);
-                        setAnimationTriggered(false);
-                    }, 2500);
+                // Only show animation for new accepted connections (not on reload/refresh)
+                if (reqs.length > 0 && reqs[0].privateRoomId) {
+                    const connectionId = reqs[0].privateRoomId;
+                    if (!shownConnectionIdsRef.current.has(connectionId)) {
+                        shownConnectionIdsRef.current.add(connectionId);
+                        setCurrentChat(connectionId);
+                        const otherUserId = reqs[0].fromUser === user.uid ? reqs[0].toUser : reqs[0].fromUser;
+                        const otherUserName = userNames[otherUserId] || `User ${otherUserId.slice(-4)}`;
+                        setNewConnectionUser(otherUserName);
+                        setShowConnectionAnimation(true);
+                        setAnimationTriggered(true);
+                        setTimeout(() => {
+                            setShowConnectionAnimation(false);
+                            setAnimationTriggered(false);
+                        }, 2500);
+                    }
                 }
             }),
         ];
@@ -153,7 +169,7 @@ export default function RoomPage() {
             leaveRoomPresence(roomId as string, user.uid);
             clearInterval(hb);
         };
-    }, [roomId, user, animationTriggered]);
+    }, [roomId, user, userNames]);
 
     // Send welcome message only once per user per room, and only to the joining user (not to all group)
     useEffect(() => {
