@@ -127,14 +127,6 @@ export default function FriendsList() {
   const acceptRequest = async (requestId: string) => {
     try {
       await acceptFriendRequest(requestId, user!.uid);
-      // Reload friends
-      const friendIds = await getFriends(user!.uid);
-      const friendData: Friend[] = [];
-      for (const id of friendIds) {
-        const name = await getUserDisplayName(id);
-        friendData.push({ id, name });
-      }
-      setFriends(friendData);
       setRequests(requests.filter(r => r.id !== requestId));
     } catch (error: any) {
       setModal({
