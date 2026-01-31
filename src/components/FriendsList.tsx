@@ -29,12 +29,18 @@ export default function FriendsList() {
     if (!user) return;
     setLoading(true);
     const userRef = doc(db, "users", user.uid);
-    const unsubUser = onSnapshot(userRef, (snap) => {
+    const unsubUser = onSnapshot(userRef, async (snap) => {
       const data = snap.data();
-      const friendIds = data?.friends || [];
+      let friendIds = data?.friends || [];
+      // Auto-repair: If friends array missing, create it
+      if (!Array.isArray(friendIds)) {
+        friendIds = [];
+        // Patch Firestore to add empty friends array
+        await updateDoc(userRef, { friends: [] });
+      }
       // Only update if friendIds actually changed
       const last = lastFriendIdsRef.current;
-      if (friendIds.length === last.length && friendIds.every((id: string, i: number) => id === last[i])) {
+      if (friendIds.length === last.length && friendIds.every((id, i) => id === last[i])) {
         setLoading(false);
         return;
       }
@@ -45,7 +51,7 @@ export default function FriendsList() {
         const friendData: Friend[] = [];
         for (const id of friendIds) {
           let name = await getUserDisplayName(id);
-          if (!name || name === "Unknown") name = id.slice(0, 8) + "...";
+          if (!name || name === "Unknown") name = id;
           friendData.push({ id, name });
         }
         setFriends(friendData);

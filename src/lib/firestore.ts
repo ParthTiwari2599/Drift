@@ -170,7 +170,15 @@ export const getUserData = async (uid: string) => {
 export const updateUserData = async (uid: string, data: { customDisplayName?: string; customAvatar?: string }) => {
   return retryFirebaseOperation(async () => {
     const userRef = doc(db, "users", uid);
+    // Read current data to preserve friends array
+    const snap = await getDoc(userRef);
+    let existing = {};
+    if (snap.exists()) {
+      const d = snap.data();
+      if (d.friends) existing = { friends: d.friends };
+    }
     await setDoc(userRef, {
+      ...existing,
       ...data,
       updatedAt: serverTimestamp(),
     }, { merge: true });

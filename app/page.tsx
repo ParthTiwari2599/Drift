@@ -430,7 +430,8 @@ export default function Home() {
               </>
             )}
 
-            {user && <FriendsList />}
+            {/* FriendsList removed as requested */}
+                {/* FriendsList removed as requested */}
 
             <div className="pt-4 border-t border-zinc-800/50 mt-8">
               <button
