@@ -6,6 +6,7 @@ import { getUserDisplayName } from "@/lib/friends";
 import { useRouter } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
+import { updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 interface Friend {
