@@ -29,12 +29,12 @@ import {
 } from "@/lib/connect";
 import { useAuth } from "@/hooks/useAuth";
 import {
-    listenToRoomPresence,
     listenToRoomPresenceUsers,
     joinRoomPresence,
     leaveRoomPresence,
     heartbeatPresence,
 } from "@/lib/presence";
+import React from "react";
 import { listenMyPrivateRooms } from "@/lib/privateRooms";
 import { sendPrivateMessage, listenPrivateMessages } from "@/lib/privateMessages";
 import { deleteRoom } from "@/lib/firestore";
@@ -70,6 +70,19 @@ import {
     MicOff,
 } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
+
+
+// Memoized "Nodes Online" display to prevent unnecessary re-renders
+const NodesOnline = React.memo(function NodesOnline({ count }: { count: number }) {
+    return (
+        <div className="flex items-center gap-2 mt-3 bg-blue-600/5 w-fit px-3 py-1 rounded-full border border-blue-500/10">
+            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_#3b82f6]" />
+            <p className="text-[10px] text-blue-400 uppercase tracking-widest font-black">
+                {count} Nodes Online
+            </p>
+        </div>
+    );
+});
 
 export default function RoomPage() {
     // Track which accepted connection IDs have already shown animation
@@ -131,13 +144,45 @@ export default function RoomPage() {
             .catch(() => setRoomLoading(false));
     }, [roomId]);
 
+    // Throttle activeCount updates to once per minute to reduce Firestore reads
+    useEffect(() => {
+        if (!roomId) return;
+        let isMounted = true;
+        let intervalId: NodeJS.Timeout | null = null;
+
+        async function fetchActiveCount() {
+            try {
+                const q = query(collection(db, "presence"), where("roomId", "==", roomId));
+                const snapshot = await getDocs(q);
+                const now = Date.now();
+                const ACTIVE_WINDOW = 30000;
+                const activeUsers = snapshot.docs.filter((d) => {
+                    const data: any = d.data();
+                    if (!data.lastActive) return false;
+                    const last = data.lastActive.toMillis ? data.lastActive.toMillis() : now;
+                    return now - last < ACTIVE_WINDOW;
+                });
+                if (isMounted) setActiveCount(activeUsers.length);
+            } catch (e) {
+                // Optionally handle error
+            }
+        }
+
+        fetchActiveCount();
+        intervalId = setInterval(fetchActiveCount, 60000); // 1 minute
+
+        return () => {
+            isMounted = false;
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [roomId]);
+
     useEffect(() => {
         if (!roomId || !user) return;
         // Debounced setter for active users
         const debouncedSetActiveUsers = debounce(setActiveUsers, 300);
         const unsubs = [
             listenToRoomMessages(roomId as string, setMessages),
-            listenToRoomPresence(roomId as string, setActiveCount),
             listenToRoomPresenceUsers(roomId as string, debouncedSetActiveUsers),
             listenIncomingRequests(user.uid, setIncomingRequests),
             listenSentRequests(user.uid, setSentRequests),
@@ -603,12 +648,10 @@ export default function RoomPage() {
                                 <span className="truncate">{decodedTopic.toUpperCase()}</span>
                                 {roomData?.isLocked && <Lock size={16} className="text-yellow-500" />}
                             </h1>
-                            <div className="flex items-center gap-2 mt-3 bg-blue-600/5 w-fit px-3 py-1 rounded-full border border-blue-500/10">
-                                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_#3b82f6]" />
-                                <p className="text-[10px] text-blue-400 uppercase tracking-widest font-black">
-                                    {activeCount} Nodes Online
-                                </p>
-                            </div>
+
+                            <NodesOnline count={activeCount} />
+// Memoized "Nodes Online" display to prevent unnecessary re-renders
+const MemoizedNodesOnline = React.memo(NodesOnline);
 
                             {/* Display Name Editor */}
                             <div className="mt-5 xl:mt-6 p-4 bg-zinc-900/30 border border-zinc-800/50 rounded-2xl">
