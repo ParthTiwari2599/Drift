@@ -72,7 +72,7 @@ import {
 import EmojiPicker from "emoji-picker-react";
 
 
-// Memoized "Nodes Online" display to prevent unnecessary re-renders
+
 const NodesOnline = React.memo(function NodesOnline({ count }: { count: number }) {
     return (
         <div className="flex items-center gap-2 mt-3 bg-blue-600/5 w-fit px-3 py-1 rounded-full border border-blue-500/10">
@@ -670,8 +670,6 @@ export default function RoomPage() {
                             </h1>
 
                             <NodesOnline count={activeCount} />
-// Memoized "Nodes Online" display to prevent unnecessary re-renders
-const MemoizedNodesOnline = React.memo(NodesOnline);
 
                             {/* Display Name Editor */}
                             <div className="mt-5 xl:mt-6 p-4 bg-zinc-900/30 border border-zinc-800/50 rounded-2xl">
