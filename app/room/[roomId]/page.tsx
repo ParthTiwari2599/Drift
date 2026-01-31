@@ -85,8 +85,23 @@ const NodesOnline = React.memo(function NodesOnline({ count }: { count: number }
 });
 
 export default function RoomPage() {
-    // Track which accepted connection IDs have already shown animation
+    // Track which accepted connection IDs have already shown animation (persisted in sessionStorage)
     const shownConnectionIdsRef = useRef<Set<string>>(new Set());
+
+    // On mount, load shown connection IDs from sessionStorage
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const key = 'drift_shown_connection_ids';
+        const stored = sessionStorage.getItem(key);
+        if (stored) {
+            try {
+                const arr = JSON.parse(stored);
+                if (Array.isArray(arr)) {
+                    shownConnectionIdsRef.current = new Set(arr);
+                }
+            } catch {}
+        }
+    }, []);
     const { roomId } = useParams();
     const router = useRouter();
     const { user } = useAuth();
@@ -193,6 +208,11 @@ export default function RoomPage() {
                     const connectionId = reqs[0].privateRoomId;
                     if (!shownConnectionIdsRef.current.has(connectionId)) {
                         shownConnectionIdsRef.current.add(connectionId);
+                        // Persist updated set in sessionStorage
+                        if (typeof window !== 'undefined') {
+                            const key = 'drift_shown_connection_ids';
+                            sessionStorage.setItem(key, JSON.stringify(Array.from(shownConnectionIdsRef.current)));
+                        }
                         setCurrentChat(connectionId);
                         const otherUserId = reqs[0].fromUser === user.uid ? reqs[0].toUser : reqs[0].fromUser;
                         const otherUserName = userNames[otherUserId] || `User ${otherUserId.slice(-4)}`;
