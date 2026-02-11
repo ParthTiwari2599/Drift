@@ -53,33 +53,39 @@ export const listRoomMessages = query({
 export const addReactionToMessage = mutation({
   args: { messageId: v.string(), emoji: v.string(), userId: v.string() },
   handler: async (ctx, args) => {
-    const msg = await ctx.db.get(args.messageId as any);
+    const messageId = ctx.db.normalizeId("messages", args.messageId);
+    if (!messageId) return;
+    const msg = await ctx.db.get(messageId);
     if (!msg) return;
     const reactions = (msg.reactions || {}) as Record<string, string[]>;
     const users = new Set(reactions[args.emoji] || []);
     users.add(args.userId);
     reactions[args.emoji] = Array.from(users);
-    await ctx.db.patch(msg._id, { reactions });
+    await ctx.db.patch(messageId, { reactions });
   },
 });
 
 export const removeReactionFromMessage = mutation({
   args: { messageId: v.string(), emoji: v.string(), userId: v.string() },
   handler: async (ctx, args) => {
-    const msg = await ctx.db.get(args.messageId as any);
+    const messageId = ctx.db.normalizeId("messages", args.messageId);
+    if (!messageId) return;
+    const msg = await ctx.db.get(messageId);
     if (!msg) return;
     const reactions = (msg.reactions || {}) as Record<string, string[]>;
     const users = new Set(reactions[args.emoji] || []);
     users.delete(args.userId);
     reactions[args.emoji] = Array.from(users);
-    await ctx.db.patch(msg._id, { reactions });
+    await ctx.db.patch(messageId, { reactions });
   },
 });
 
 export const deleteMessage = mutation({
   args: { messageId: v.string() },
   handler: async (ctx, args) => {
-    await ctx.db.delete(args.messageId as any);
+    const messageId = ctx.db.normalizeId("messages", args.messageId);
+    if (!messageId) return;
+    await ctx.db.delete(messageId);
   },
 });
 
