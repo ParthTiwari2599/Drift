@@ -67,9 +67,9 @@ export const getRoom = query({
   args: { roomId: v.string() },
   handler: async (ctx, args) => {
     const roomId = ctx.db.normalizeId("rooms", args.roomId);
-    if (!roomId) throw new Error("Room not found");
+    if (!roomId) return null;
     const room = await ctx.db.get(roomId);
-    if (!room) throw new Error("Room not found");
+    if (!room) return null;
     return { id: room._id, ...room };
   },
 });

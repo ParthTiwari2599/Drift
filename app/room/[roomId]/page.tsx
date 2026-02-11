@@ -641,6 +641,23 @@ export default function RoomPage() {
             </div>
         );
 
+    if (!roomRecord)
+        return (
+            <div className="h-screen bg-stone-100 flex items-center justify-center">
+                <div className="border border-stone-200 bg-white p-8 rounded-3xl text-center">
+                    <p className="text-stone-700 font-mono text-xs uppercase tracking-widest">
+                        Room Not Found
+                    </p>
+                    <button
+                        onClick={() => router.push("/")}
+                        className="mt-4 text-white bg-orange-600 px-6 py-2 rounded-xl text-xs font-bold uppercase"
+                    >
+                        Go Home
+                    </button>
+                </div>
+            </div>
+        );
+
     if (!user || user.isAnonymous)
         return (
             <div className="h-screen bg-black flex items-center justify-center">

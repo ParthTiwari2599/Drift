@@ -42,6 +42,8 @@ interface Room {
 }
 
 export default function Home() {
+  const githubUrl = "https://github.com/parthtiwari2599";
+  const linkedinUrl = "https://www.linkedin.com/in/parthtiwari2599";
   const router = useRouter();
   const { user, loading, signInWithGoogle, signOut } = useAuth();
   const [roomName, setRoomName] = useState("");
@@ -958,7 +960,15 @@ export default function Home() {
                   Parth Tiwari
                 </div>
                 <div className="text-[8px] sm:text-[9px] text-stone-500 font-medium">
-                  GitHub: @parthtiwari2599
+                  GitHub:{" "}
+                  <a
+                    href={githubUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-orange-600 underline underline-offset-2"
+                  >
+                    @parthtiwari2599
+                  </a>
                 </div>
                 <div className="text-[8px] sm:text-[9px] text-stone-500 font-medium">
                   Email: parthtiwari2599@gmail.com
@@ -969,9 +979,25 @@ export default function Home() {
               </div>
 
               <div className="flex flex-wrap justify-center gap-4 sm:gap-6 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-stone-400 order-2 sm:order-3">
-                <span className="hover:text-orange-600 cursor-pointer transition-colors">Terminal</span>
-                <span className="hover:text-orange-600 cursor-pointer transition-colors">Security</span>
-                <span className="hover:text-orange-600 cursor-pointer transition-colors">GitHub</span>
+                <a
+                  href={linkedinUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-orange-600 transition-colors"
+                >
+                  LinkedIn
+                </a>
+                <span className="hover:text-orange-600 cursor-default transition-colors">
+                  Security
+                </span>
+                <a
+                  href={githubUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-orange-600 transition-colors"
+                >
+                  GitHub
+                </a>
               </div>
             </div>
 
