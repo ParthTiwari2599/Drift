@@ -99,6 +99,10 @@ export default function RoomPage() {
         roomIdParam ? { roomId: roomIdParam } : "skip"
     );
     const roomLoading = roomData === undefined;
+    const roomRecord =
+        roomData && typeof roomData === "object" && "topic" in roomData
+            ? (roomData as { topic: string; createdBy?: string; isLocked?: boolean })
+            : null;
 
     const groupMessages =
         useQuery(
@@ -232,7 +236,7 @@ export default function RoomPage() {
 
     // Send welcome message only once per user per room, and only to the joining user (not to all group)
     useEffect(() => {
-        if (!user || !roomIdParam || !roomData || welcomeSentRef.current) return;
+        if (!user || !roomIdParam || !roomRecord || welcomeSentRef.current) return;
         const welcomeKey = `drift_welcome_sent_${roomIdParam}_${user.uid}`;
         if (typeof window !== 'undefined' && sessionStorage.getItem(welcomeKey)) {
             welcomeSentRef.current = true;
@@ -246,7 +250,7 @@ export default function RoomPage() {
             sessionStorage.setItem(welcomeKey, '1');
         }
         welcomeSentRef.current = true;
-    }, [user, roomIdParam, roomData]);
+    }, [user, roomIdParam, roomRecord]);
 
     useEffect(() => {
         const unsubs = privateRooms.map((room) =>
@@ -530,9 +534,9 @@ export default function RoomPage() {
     };
 
     const handleDeleteRoom = async () => {
-        if (!user || !roomData || !roomIdParam) return;
+        if (!user || !roomRecord || !roomIdParam) return;
 
-        const decodedTopic = roomData?.topic ? decodeURIComponent(roomData.topic) : "General Chat";
+        const decodedTopic = roomRecord.topic ? decodeURIComponent(roomRecord.topic) : "General Chat";
         const confirmDelete = window.confirm(
             `Are you sure you want to delete the room "${decodedTopic}"? This action cannot be undone and all messages will be lost.`
         );
@@ -654,7 +658,7 @@ export default function RoomPage() {
             </div>
         );
 
-    const decodedTopic = roomData?.topic ? decodeURIComponent(roomData.topic) : "General Chat";
+    const decodedTopic = roomRecord?.topic ? decodeURIComponent(roomRecord.topic) : "General Chat";
 
     return (
         <>
@@ -681,7 +685,7 @@ export default function RoomPage() {
                                 >
                                     <ChevronLeft size={14} className="mr-1" /> Exit Protocol
                                 </button>
-                                {roomData?.createdBy === user?.uid && (
+                                {roomRecord?.createdBy === user?.uid && (
                                     <button
                                         onClick={handleDeleteRoom}
                                         className="flex items-center text-[9px] text-red-500 hover:text-red-400 transition-all uppercase font-black tracking-[0.2em] hover:bg-red-500/10 px-2 py-1 rounded"
@@ -694,7 +698,7 @@ export default function RoomPage() {
                             <h1 className={`text-lg xl:text-2xl font-black truncate tracking-tighter flex items-center gap-2 ${theme === "dark" ? "text-white" : "text-stone-900"}`}>
                                 <Hash className="text-orange-600" size={20} />
                                 <span className="truncate">{decodedTopic.toUpperCase()}</span>
-                                {roomData?.isLocked && <Lock size={16} className="text-yellow-500" />}
+                                {roomRecord?.isLocked && <Lock size={16} className="text-yellow-500" />}
                             </h1>
 
                             <NodesOnline count={activeCount} />

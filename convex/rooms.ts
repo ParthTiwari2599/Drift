@@ -66,7 +66,9 @@ export const findPrivateRoom = query({
 export const getRoom = query({
   args: { roomId: v.string() },
   handler: async (ctx, args) => {
-    const room = await ctx.db.get(args.roomId as any);
+    const roomId = ctx.db.normalizeId("rooms", args.roomId);
+    if (!roomId) throw new Error("Room not found");
+    const room = await ctx.db.get(roomId);
     if (!room) throw new Error("Room not found");
     return { id: room._id, ...room };
   },
@@ -75,12 +77,14 @@ export const getRoom = query({
 export const deleteRoom = mutation({
   args: { roomId: v.string(), userId: v.string() },
   handler: async (ctx, args) => {
-    const room = await ctx.db.get(args.roomId as any);
+    const roomId = ctx.db.normalizeId("rooms", args.roomId);
+    if (!roomId) throw new Error("Room not found");
+    const room = await ctx.db.get(roomId);
     if (!room) throw new Error("Room not found");
     if (room.createdBy !== args.userId) {
       throw new Error("Only room creator can delete this room");
     }
-    await ctx.db.delete(room._id);
+    await ctx.db.delete(roomId);
     return true;
   },
 });
