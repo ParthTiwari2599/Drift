@@ -228,7 +228,7 @@ export default function RoomPage() {
             leaveRoomPresence({ roomId: roomIdParam, userId: user.uid });
             clearInterval(hb);
         };
-    }, [roomIdParam, user, joinRoomPresence, heartbeatPresence, leaveRoomPresence]);
+    }, [roomIdParam, user?.uid, user?.displayName, user?.email]);
 
     // Send welcome message only once per user per room, and only to the joining user (not to all group)
     useEffect(() => {
@@ -268,7 +268,7 @@ export default function RoomPage() {
         cleanupExpiredMessages({});
 
         return () => clearInterval(cleanupInterval);
-    }, [cleanupExpiredMessages]);
+    }, []);
 
     useEffect(() => {
         if (!isAtBottom) return;
