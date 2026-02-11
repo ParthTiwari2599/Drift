@@ -274,7 +274,7 @@ export default function Home() {
 
   if (loading)
     return (
-      <div className="min-h-screen bg-stone-100 flex items-center justify-center text-orange-600 font-mono italic text-sm sm:text-base">
+      <div className="min-h-screen bg-stone-100 flex items-center justify-center text-emerald-600 font-mono italic text-sm sm:text-base">
         INITIALIZING_DRIFT...
       </div>
     );
@@ -289,7 +289,7 @@ export default function Home() {
         onSubmit={modal.onSubmit}
       />
       <div
-        className={`min-h-screen bg-stone-100 text-stone-900 selection:bg-orange-500/30 ${
+        className={`min-h-screen bg-stone-100 text-stone-900 selection:bg-emerald-500/30 ${
           isMobileMenuOpen ? "overflow-hidden" : ""
         }`}
       >
@@ -297,7 +297,7 @@ export default function Home() {
         <aside className="hidden sm:flex w-80 bg-white border-r border-stone-200 flex-col backdrop-blur-2xl fixed left-0 top-0 h-full z-30">
           <div className="p-8 border-b border-stone-200">
             <div className="flex items-center gap-2 mb-6">
-              <Zap className="text-orange-600" fill="currentColor" size={20} />
+              <Zap className="text-emerald-600" fill="currentColor" size={20} />
               <span className="text-lg font-black italic tracking-tighter">
                 DRIFT.
               </span>
@@ -307,7 +307,7 @@ export default function Home() {
             {user && !user.isAnonymous ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl border border-stone-200">
-                  <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center text-white">
+                  <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center text-white">
                     <User size={16} />
                   </div>
                   <div>
@@ -330,7 +330,7 @@ export default function Home() {
             ) : (
               <button
                 onClick={signInWithGoogle}
-                className="w-full flex items-center gap-3 p-4 bg-orange-600 hover:bg-orange-700 rounded-xl transition-all text-white shadow-lg shadow-orange-200"
+                className="w-full flex items-center gap-3 p-4 bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all text-white shadow-lg shadow-emerald-200"
               >
                 <Shield size={16} />
                 <span className="text-sm font-medium">Secure Auth</span>
@@ -348,7 +348,7 @@ export default function Home() {
               onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
               className="w-full flex items-center gap-3 p-3 hover:bg-stone-50 rounded-xl transition-all text-left"
             >
-              <House size={16} className="text-orange-500" />
+              <House size={16} className="text-emerald-500" />
               <span className="text-sm font-medium">Home</span>
             </button>
 
@@ -362,7 +362,7 @@ export default function Home() {
                   }}
                   className="w-full flex items-center gap-3 p-3 hover:bg-stone-50 rounded-xl transition-all text-left"
                 >
-                  <MessageCircle size={16} className="text-orange-600" />
+                  <MessageCircle size={16} className="text-emerald-600" />
                   <span className="text-sm font-medium">
                     Active Rooms ({activeRooms.length})
                   </span>
@@ -376,7 +376,7 @@ export default function Home() {
                   }}
                   className="w-full flex items-center gap-3 p-3 hover:bg-stone-50 rounded-xl transition-all text-left"
                 >
-                  <Plus size={16} className="text-orange-600" />
+                  <Plus size={16} className="text-emerald-600" />
                   <span className="text-sm font-medium">Create Room</span>
                 </button>
               </>
@@ -402,12 +402,12 @@ export default function Home() {
           {/* --- HERO SECTION --- */}
           <div className="relative border-b border-stone-200">
             <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-orange-500/5 blur-[120px] rounded-full opacity-50" />
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-emerald-500/5 blur-[120px] rounded-full opacity-50" />
             </div>
 
             <nav className="relative z-10 flex justify-between items-center px-4 sm:px-6 py-6 max-w-7xl mx-auto">
               <div className="flex items-center gap-2 sm:hidden">
-                <Zap className="text-orange-600" fill="currentColor" />
+                <Zap className="text-emerald-600" fill="currentColor" />
                 <span className="text-xl sm:text-2xl font-black italic tracking-tighter">
                   DRIFT.
                 </span>
@@ -418,14 +418,14 @@ export default function Home() {
                 {user && !user.isAnonymous ? (
                   <button
                     onClick={signOut}
-                    className="text-[10px] font-black uppercase tracking-widest border border-stone-200 px-6 py-2 rounded-full hover:bg-orange-500/10 transition-all"
+                    className="text-[10px] font-black uppercase tracking-widest border border-stone-200 px-6 py-2 rounded-full hover:bg-emerald-500/10 transition-all"
                   >
                     Disconnect
                   </button>
                 ) : (
                   <button
                     onClick={signInWithGoogle}
-                    className="bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest px-6 py-2 rounded-full shadow-lg shadow-orange-200"
+                    className="bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest px-6 py-2 rounded-full shadow-lg shadow-emerald-200"
                   >
                     Secure Auth
                   </button>
@@ -461,7 +461,7 @@ export default function Home() {
                   <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-2">
                       <Zap
-                        className="text-orange-600"
+                        className="text-emerald-600"
                         fill="currentColor"
                         size={20}
                       />
@@ -481,7 +481,7 @@ export default function Home() {
                     {user && !user.isAnonymous ? (
                       <div className="space-y-4">
                         <div className="flex items-center gap-3 p-3 bg-white border border-stone-200 rounded-xl">
-                          <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center text-white">
+                          <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center text-white">
                             <User size={16} />
                           </div>
                           <div>
@@ -504,7 +504,7 @@ export default function Home() {
                     ) : (
                       <button
                         onClick={signInWithGoogle}
-                        className="w-full flex items-center gap-3 p-4 bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-lg shadow-orange-200 transition-all"
+                        className="w-full flex items-center gap-3 p-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-200 transition-all"
                       >
                         <Shield size={16} />
                         <span className="text-sm font-medium">Secure Auth</span>
@@ -524,7 +524,7 @@ export default function Home() {
                       }}
                       className="w-full flex items-center gap-3 p-3 hover:bg-white rounded-xl transition-all text-left"
                     >
-                      <House size={16} className="text-orange-500" />
+                      <House size={16} className="text-emerald-500" />
                       <span className="text-sm font-medium text-stone-900">Home</span>
                     </button>
 
@@ -541,7 +541,7 @@ export default function Home() {
                         >
                           <MessageCircle
                             size={16}
-                            className="text-orange-600"
+                            className="text-emerald-600"
                           />
                           <span className="text-sm font-medium text-stone-900">
                             Active Rooms ({activeRooms.length})
@@ -557,7 +557,7 @@ export default function Home() {
                           }}
                           className="w-full flex items-center gap-3 p-3 hover:bg-white rounded-xl transition-all text-left"
                         >
-                          <Plus size={16} className="text-orange-600" />
+                          <Plus size={16} className="text-emerald-600" />
                           <span className="text-sm font-medium text-stone-900">
                             Create Room
                           </span>
@@ -584,7 +584,7 @@ export default function Home() {
                       <div className="text-[8px] font-black uppercase tracking-[0.4em] text-stone-400">
                         DEVELOPED BY
                       </div>
-                      <div className="text-sm font-bold text-orange-600">
+                      <div className="text-sm font-bold text-emerald-600">
                         Parth Tiwari
                       </div>
                       <div className="text-[7px] text-stone-500 font-medium">
@@ -602,7 +602,7 @@ export default function Home() {
             <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-10 sm:pt-20 pb-16 sm:pb-32 grid lg:grid-cols-2 gap-10 sm:gap-20 items-center">
               <div className="space-y-6 sm:space-y-8">
                 <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter italic leading-[0.8] text-stone-900">
-                  VANISH <br /> <span className="text-orange-600">INTO</span>{" "}
+                  VANISH <br /> <span className="text-emerald-600">INTO</span>{" "}
                   <br /> DATA.
                 </h1>
                 <p className="text-stone-500 text-lg sm:text-xl max-w-md font-medium leading-relaxed">
@@ -612,7 +612,7 @@ export default function Home() {
                 {(!user || user.isAnonymous) && (
                   <button
                     onClick={signInWithGoogle}
-                    className="flex items-center gap-3 sm:gap-4 bg-orange-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-orange-700 transition-all shadow-xl shadow-orange-200"
+                    className="flex items-center gap-3 sm:gap-4 bg-emerald-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200"
                   >
                     Start Drifting <ArrowRight size={20} />
                   </button>
@@ -625,7 +625,7 @@ export default function Home() {
                   className="bg-white border border-stone-200 p-6 sm:p-8 md:p-12 rounded-[2rem] sm:rounded-[3rem] shadow-2xl shadow-stone-200/50 w-full max-w-lg mx-auto lg:mx-0"
                 >
                   <h2 className="text-lg sm:text-xl font-black uppercase tracking-widest mb-6 sm:mb-8 flex items-center gap-3 text-stone-900">
-                    <Terminal size={20} className="text-orange-600" /> New Signal
+                    <Terminal size={20} className="text-emerald-600" /> New Signal
                   </h2>
                   <div className="space-y-4 sm:space-y-6">
                     <input
@@ -633,7 +633,7 @@ export default function Home() {
                       value={roomName}
                       onChange={(e) => setRoomName(e.target.value)}
                       placeholder="Room Name..."
-                      className="w-full bg-stone-50 border border-stone-200 rounded-2xl px-4 sm:px-6 py-3 sm:py-4 outline-none focus:border-orange-500 transition-all font-bold text-sm sm:text-base text-stone-900"
+                      className="w-full bg-stone-50 border border-stone-200 rounded-2xl px-4 sm:px-6 py-3 sm:py-4 outline-none focus:border-emerald-500 transition-all font-bold text-sm sm:text-base text-stone-900"
                     />
 
                     {/* Password Protection Toggle */}
@@ -650,7 +650,7 @@ export default function Home() {
                               setConfirmPassword("");
                             }
                           }}
-                          className="w-4 h-4 text-orange-600 bg-stone-100 border-stone-300 rounded focus:ring-orange-500 focus:ring-2"
+                          className="w-4 h-4 text-emerald-600 bg-stone-100 border-stone-300 rounded focus:ring-emerald-500 focus:ring-2"
                         />
                         <span className="text-xs sm:text-sm text-stone-500 font-medium">
                           Make room password protected
@@ -667,7 +667,7 @@ export default function Home() {
                             value={roomPassword}
                             onChange={(e) => setRoomPassword(e.target.value)}
                             placeholder="Enter password (min 4 characters)"
-                            className="w-full bg-white border border-stone-300 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-stone-900 placeholder-stone-400 focus:outline-none focus:border-orange-500 font-medium text-sm sm:text-base"
+                            className="w-full bg-white border border-stone-300 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-stone-900 placeholder-stone-400 focus:outline-none focus:border-emerald-500 font-medium text-sm sm:text-base"
                           />
                         </div>
                         <div>
@@ -676,7 +676,7 @@ export default function Home() {
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             placeholder="Confirm password"
-                            className="w-full bg-white border border-stone-300 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-stone-900 placeholder-stone-400 focus:outline-none focus:border-orange-500 font-medium text-sm sm:text-base"
+                            className="w-full bg-white border border-stone-300 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-stone-900 placeholder-stone-400 focus:outline-none focus:border-emerald-500 font-medium text-sm sm:text-base"
                           />
                         </div>
                         <div className="text-xs text-stone-400 font-medium">
@@ -688,7 +688,7 @@ export default function Home() {
 
                     <button
                       onClick={createRoom}
-                      className="w-full bg-stone-900 text-white py-4 sm:py-5 rounded-2xl font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-orange-600 transition-all shadow-lg"
+                      className="w-full bg-stone-900 text-white py-4 sm:py-5 rounded-2xl font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-emerald-600 transition-all shadow-lg"
                     >
                       Establish Connection
                     </button>
@@ -706,7 +706,7 @@ export default function Home() {
             >
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 sm:mb-12 gap-4 sm:gap-6">
                 <div className="space-y-2">
-                  <span className="text-orange-600 font-black uppercase tracking-[0.3em] text-[10px]">
+                  <span className="text-emerald-600 font-black uppercase tracking-[0.3em] text-[10px]">
                     Network Monitor
                   </span>
                   <h2 className="text-3xl sm:text-4xl font-black italic tracking-tighter text-stone-900">
@@ -720,7 +720,7 @@ export default function Home() {
                   </p>
                   <button
                     onClick={findAndOpenRoom}
-                    className="px-4 py-2 bg-white border border-stone-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-stone-600 hover:text-orange-600 transition-all shadow-sm"
+                    className="px-4 py-2 bg-white border border-stone-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-stone-600 hover:text-emerald-600 transition-all shadow-sm"
                   >
                     Find Room
                   </button>
@@ -732,28 +732,28 @@ export default function Home() {
                   <div
                     key={room.id}
                     onClick={() => joinRoom(room)}
-                    className="group bg-white border border-stone-200 p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] cursor-pointer hover:border-orange-500 hover:shadow-xl hover:shadow-orange-100 transition-all"
+                    className="group bg-white border border-stone-200 p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] cursor-pointer hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-100 transition-all"
                   >
                     <div className="flex items-center justify-between mb-4 sm:mb-6">
-                      <div className="p-3 bg-stone-50 rounded-2xl group-hover:bg-orange-50 transition-colors">
+                      <div className="p-3 bg-stone-50 rounded-2xl group-hover:bg-emerald-50 transition-colors">
                         <Hash
-                          className="text-stone-400 group-hover:text-orange-600"
+                          className="text-stone-400 group-hover:text-emerald-600"
                           size={28}
                         />
                       </div>
-                      {room.isLocked && <Lock className="text-orange-400" size={20} />}
+                      {room.isLocked && <Lock className="text-emerald-400" size={20} />}
                     </div>
                     <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2 flex items-center gap-2 text-stone-800">
                       {room.topic}
                     </h3>
                     <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse" />
+                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                       <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
                         {room.activeCount || 0} Nodes
                       </span>
                     </div>
                     {room.isLocked && (
-                      <p className="text-xs text-orange-600 mt-2 opacity-0 group-hover:opacity-100 transition-opacity font-bold">
+                      <p className="text-xs text-emerald-600 mt-2 opacity-0 group-hover:opacity-100 transition-opacity font-bold">
                         PASSWORD_PROTECTED
                       </p>
                     )}
@@ -767,9 +767,9 @@ export default function Home() {
           <section className="bg-white py-16 sm:py-32 border-y border-stone-200">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 grid md:grid-cols-2 gap-10 sm:gap-20 items-center">
               <div className="relative aspect-square bg-stone-100 rounded-[3rem] sm:rounded-[4rem] overflow-hidden border border-stone-200 group order-2 md:order-1">
-                <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-orange-200/20 opacity-50" />
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-emerald-200/20 opacity-50" />
                 <div className="absolute inset-0 flex items-center justify-center p-8 sm:p-12">
-                  <div className="space-y-3 sm:space-y-4 font-mono text-[9px] sm:text-[10px] text-orange-600 opacity-40 group-hover:opacity-100 transition-opacity">
+                  <div className="space-y-3 sm:space-y-4 font-mono text-[9px] sm:text-[10px] text-emerald-600 opacity-40 group-hover:opacity-100 transition-opacity">
                     <p>{">"} INITIALIZING SECURE_LAYER...</p>
                     <p>{">"} ENCRYPTING END_TO_END...</p>
                     <p>{">"} DELETING METADATA...</p>
@@ -789,7 +789,7 @@ export default function Home() {
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 pt-6 sm:pt-8">
                     <div className="space-y-2">
-                      <Shield className="text-orange-600" size={24} />
+                      <Shield className="text-emerald-600" size={24} />
                       <h4 className="font-black text-xs uppercase tracking-widest text-stone-900">
                         No Persistence
                       </h4>
@@ -798,7 +798,7 @@ export default function Home() {
                       </p>
                     </div>
                     <div className="space-y-2">
-                      <Sparkles className="text-orange-500" size={24} />
+                      <Sparkles className="text-emerald-500" size={24} />
                       <h4 className="font-black text-xs uppercase tracking-widest text-stone-900">
                         Identity Fluid
                       </h4>
@@ -839,7 +839,7 @@ export default function Home() {
                         type="text"
                         value={tempDisplayName}
                         onChange={(e) => setTempDisplayName(e.target.value)}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-900 placeholder-stone-400 focus:outline-none focus:border-orange-500 font-bold"
+                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-900 placeholder-stone-400 focus:outline-none focus:border-emerald-500 font-bold"
                         placeholder="Enter your display name"
                         maxLength={30}
                       />
@@ -859,7 +859,7 @@ export default function Home() {
                             onClick={() => setSelectedAvatar(emoji)}
                             className={`aspect-square rounded-xl border-2 text-2xl flex items-center justify-center transition-all ${
                               selectedAvatar === emoji
-                                ? "border-orange-500 bg-orange-50"
+                                ? "border-emerald-500 bg-emerald-50"
                                 : "border-stone-100 hover:border-stone-300"
                             }`}
                           >
@@ -878,7 +878,7 @@ export default function Home() {
                       </button>
                       <button
                         onClick={handleSaveSettings}
-                        className="flex-1 px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl transition-all font-bold text-sm shadow-lg shadow-orange-100"
+                        className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all font-bold text-sm shadow-lg shadow-emerald-100"
                       >
                         Save
                       </button>
@@ -925,9 +925,9 @@ export default function Home() {
               ].map((item, i) => (
                 <div
                   key={i}
-                  className="p-6 sm:p-10 bg-white border border-stone-200 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-6 hover:border-orange-300 hover:shadow-xl hover:shadow-orange-50 transition-all"
+                  className="p-6 sm:p-10 bg-white border border-stone-200 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-6 hover:border-emerald-300 hover:shadow-xl hover:shadow-emerald-50 transition-all"
                 >
-                  <span className="text-3xl sm:text-4xl font-black text-orange-600 opacity-20">
+                  <span className="text-3xl sm:text-4xl font-black text-emerald-600 opacity-20">
                     {item.step}
                   </span>
                   <h3 className="text-lg sm:text-xl font-black italic tracking-tight text-stone-800">
@@ -956,7 +956,7 @@ export default function Home() {
                 <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.4em] text-stone-300">
                   DEVELOPED BY
                 </div>
-                <div className="text-sm sm:text-base font-bold text-orange-600">
+                <div className="text-sm sm:text-base font-bold text-emerald-600">
                   Parth Tiwari
                 </div>
                 <div className="text-[8px] sm:text-[9px] text-stone-500 font-medium">
@@ -965,7 +965,7 @@ export default function Home() {
                     href={githubUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:text-orange-600 underline underline-offset-2"
+                    className="hover:text-emerald-600 underline underline-offset-2"
                   >
                     @parthtiwari2599
                   </a>
@@ -983,18 +983,18 @@ export default function Home() {
                   href={linkedinUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-orange-600 transition-colors"
+                  className="hover:text-emerald-600 transition-colors"
                 >
                   LinkedIn
                 </a>
-                <span className="hover:text-orange-600 cursor-default transition-colors">
+                <span className="hover:text-emerald-600 cursor-default transition-colors">
                   Security
                 </span>
                 <a
                   href={githubUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-orange-600 transition-colors"
+                  className="hover:text-emerald-600 transition-colors"
                 >
                   GitHub
                 </a>
@@ -1012,3 +1012,5 @@ export default function Home() {
     </>
   );
 }
+
+

@@ -53,7 +53,7 @@ const THEME = {
     bg: "bg-stone-100",
     sidebar: "bg-white",
     card: "bg-white",
-    accent: "orange-600",
+    accent: "emerald-600",
     textPrimary: "text-stone-900",
     textSecondary: "text-stone-500",
     border: "border-stone-200",
@@ -62,9 +62,9 @@ const THEME = {
 
 const NodesOnline = React.memo(function NodesOnline({ count }: { count: number }) {
     return (
-        <div className="flex items-center gap-2 mt-3 bg-orange-600/5 w-fit px-3 py-1 rounded-full border border-orange-500/10">
-            <div className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse shadow-[0_0_8px_#ea580c]" />
-            <p className="text-[10px] text-orange-400 uppercase tracking-widest font-black">
+        <div className="flex items-center gap-2 mt-3 bg-emerald-600/5 w-fit px-3 py-1 rounded-full border border-emerald-500/10">
+            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#ea580c]" />
+            <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-black">
                 {count} Nodes Online
             </p>
         </div>
@@ -634,8 +634,8 @@ export default function RoomPage() {
     if (roomLoading)
         return (
             <div className="h-screen bg-[#050505] flex flex-col items-center justify-center space-y-4">
-                <div className="w-12 h-12 border-2 border-orange-600 border-t-transparent rounded-full animate-spin" />
-                <div className="text-orange-500 font-mono text-[10px] uppercase tracking-[0.5em] animate-pulse">
+                <div className="w-12 h-12 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                <div className="text-emerald-500 font-mono text-[10px] uppercase tracking-[0.5em] animate-pulse">
                     Establishing Secure Uplink...
                 </div>
             </div>
@@ -650,7 +650,7 @@ export default function RoomPage() {
                     </p>
                     <button
                         onClick={() => router.push("/")}
-                        className="mt-4 text-white bg-orange-600 px-6 py-2 rounded-xl text-xs font-bold uppercase"
+                        className="mt-4 text-white bg-emerald-600 px-6 py-2 rounded-xl text-xs font-bold uppercase"
                     >
                         Go Home
                     </button>
@@ -694,7 +694,7 @@ export default function RoomPage() {
                             } flex-col z-30 backdrop-blur-2xl border-r`}
                     >
                         <div className="p-5 xl:p-8 border-b border-stone-200/50 relative overflow-hidden group">
-                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-orange-600 to-transparent opacity-50" />
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-600 to-transparent opacity-50" />
                             <div className="flex items-center justify-between mb-4 xl:mb-6">
                                 <button
                                     onClick={() => router.push("/")}
@@ -713,7 +713,7 @@ export default function RoomPage() {
                                 )}
                             </div>
                             <h1 className={`text-lg xl:text-2xl font-black truncate tracking-tighter flex items-center gap-2 ${theme === "dark" ? "text-white" : "text-stone-900"}`}>
-                                <Hash className="text-orange-600" size={20} />
+                                <Hash className="text-emerald-600" size={20} />
                                 <span className="truncate">{decodedTopic.toUpperCase()}</span>
                                 {roomRecord?.isLocked && <Lock size={16} className="text-yellow-500" />}
                             </h1>
@@ -734,7 +734,7 @@ export default function RoomPage() {
                                                 );
                                                 setIsEditingName(true);
                                             }}
-                                            className="text-[9px] text-orange-500 hover:text-orange-400 font-bold uppercase"
+                                            className="text-[9px] text-emerald-500 hover:text-emerald-400 font-bold uppercase"
                                         >
                                             Edit
                                         </button>
@@ -745,7 +745,7 @@ export default function RoomPage() {
                                         <input
                                             value={tempDisplayName}
                                             onChange={(e) => setTempDisplayName(e.target.value)}
-                                            className="w-full px-3 py-2 bg-stone-200 border border-stone-200 rounded-lg text-white text-sm focus:border-orange-500 focus:outline-none"
+                                            className="w-full px-3 py-2 bg-stone-200 border border-stone-200 rounded-lg text-white text-sm focus:border-emerald-500 focus:outline-none"
                                             placeholder="Enter your display name..."
                                             onKeyDown={(e) => {
                                                 if (e.key === "Enter") handleSaveDisplayName();
@@ -756,7 +756,7 @@ export default function RoomPage() {
                                         <div className="flex gap-2">
                                             <button
                                                 onClick={handleSaveDisplayName}
-                                                className="flex-1 bg-orange-600 text-white text-xs py-2 rounded-lg font-bold hover:bg-orange-500 transition-colors"
+                                                className="flex-1 bg-emerald-600 text-white text-xs py-2 rounded-lg font-bold hover:bg-emerald-500 transition-colors"
                                             >
                                                 Save
                                             </button>
@@ -796,7 +796,7 @@ export default function RoomPage() {
                                             className={
                                                 currentChat === "group"
                                                     ? "text-black"
-                                                    : "text-stone-600 group-hover:text-orange-500"
+                                                    : "text-stone-600 group-hover:text-emerald-500"
                                             }
                                         />
                                         <span className="text-xs font-black uppercase">Public Stream</span>
@@ -816,14 +816,14 @@ export default function RoomPage() {
                                             key={room.id}
                                             onClick={() => setCurrentChat(room.id)}
                                             className={`flex items-center gap-3 p-3 xl:p-4 rounded-2xl cursor-pointer transition-all mb-2 border ${currentChat === room.id
-                                                ? "bg-orange-600 border-orange-500 text-white shadow-lg shadow-orange-600/20"
+                                                ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/20"
                                                 : "hover:bg-stone-100/50 border-transparent text-stone-500 hover:text-zinc-200"
                                                 }`}
                                         >
                                             <div
                                                 className={`w-2 h-2 rounded-full ${currentChat === room.id
                                                     ? "bg-white animate-pulse"
-                                                    : "bg-orange-600/40"
+                                                    : "bg-emerald-600/40"
                                                     }`}
                                             />
                                             <span className="text-xs font-black uppercase tracking-tight truncate">
@@ -853,7 +853,7 @@ export default function RoomPage() {
                                         >
                                             <div className="flex flex-col">
                                                 <span
-                                                    className={`text-xs font-black tracking-tight ${u.userId === user.uid ? "text-orange-500" : "text-stone-500"
+                                                    className={`text-xs font-black tracking-tight ${u.userId === user.uid ? "text-emerald-500" : "text-stone-500"
                                                         }`}
                                                 >
                                                     {u.userId === user.uid
@@ -867,7 +867,7 @@ export default function RoomPage() {
                                             {u.userId !== user.uid && (
                                                 <>
                                                     {alreadyConnected ? (
-                                                        <div className="bg-orange-600/10 p-2 rounded-lg text-orange-500">
+                                                        <div className="bg-emerald-600/10 p-2 rounded-lg text-emerald-500">
                                                             <UserCheck size={14} />
                                                         </div>
                                                     ) : connectionStatus === "pending" ? (
@@ -937,7 +937,7 @@ export default function RoomPage() {
                                             ? "Signal: Global_Broadcast"
                                             : "Signal: Peer_To_Peer_Encrypted"}
                                     </h2>
-                                    <p className="text-[8px] sm:text-[9px] text-orange-600 font-bold uppercase tracking-widest mt-0.5">
+                                    <p className="text-[8px] sm:text-[9px] text-emerald-600 font-bold uppercase tracking-widest mt-0.5">
                                         Latency: 2ms • Security: {encryptionEnabled ? "E2E Encrypted" : "High"}
                                     </p>
                                 </div>
@@ -997,7 +997,7 @@ export default function RoomPage() {
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                         placeholder="Search messages..."
-                                        className="w-full bg-stone-200/50 border border-stone-200/50 rounded-lg pl-10 pr-24 py-2 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500/50"
+                                        className="w-full bg-stone-200/50 border border-stone-200/50 rounded-lg pl-10 pr-24 py-2 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
                                     />
                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
                                         {searchTerm && (
@@ -1026,7 +1026,7 @@ export default function RoomPage() {
                                         Showing messages containing "{searchTerm}" •
                                         <button
                                             onClick={() => setSearchTerm("")}
-                                            className="text-orange-400 hover:text-orange-300 underline ml-1"
+                                            className="text-emerald-400 hover:text-emerald-300 underline ml-1"
                                         >
                                             Show all messages
                                         </button>
@@ -1041,10 +1041,10 @@ export default function RoomPage() {
                                 {incomingRequests.map((req) => (
                                     <div
                                         key={req.id}
-                                        className="bg-stone-100/90 border border-orange-600/30 p-4 sm:p-5 rounded-3xl shadow-2xl backdrop-blur-xl flex flex-col gap-4 animate-in slide-in-from-top-10 duration-500"
+                                        className="bg-stone-100/90 border border-emerald-600/30 p-4 sm:p-5 rounded-3xl shadow-2xl backdrop-blur-xl flex flex-col gap-4 animate-in slide-in-from-top-10 duration-500"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-orange-600 rounded-xl">
+                                            <div className="p-2 bg-emerald-600 rounded-xl">
                                                 <Zap size={16} className="text-white" />
                                             </div>
                                             <p className="text-[10px] sm:text-[11px] font-black uppercase text-white leading-none">
@@ -1054,7 +1054,7 @@ export default function RoomPage() {
                                         <div className="flex gap-2">
                                             <button
                                                 onClick={() => acceptRequest(req.id)}
-                                                className="flex-1 bg-white text-black text-[10px] py-2.5 rounded-xl font-black uppercase hover:bg-orange-600 hover:text-white transition-all"
+                                                className="flex-1 bg-white text-black text-[10px] py-2.5 rounded-xl font-black uppercase hover:bg-emerald-600 hover:text-white transition-all"
                                             >
                                                 Accept
                                             </button>
@@ -1079,7 +1079,7 @@ export default function RoomPage() {
                                     <h2 className="text-2xl font-black text-white mb-2 animate-pulse">
                                         Connection Established!
                                     </h2>
-                                    <p className="text-lg text-orange-400 font-medium">
+                                    <p className="text-lg text-emerald-400 font-medium">
                                         You are now connected with {newConnectionUser}
                                     </p>
                                     {/* Floating Emojis */}
@@ -1154,7 +1154,7 @@ export default function RoomPage() {
                                                                 className="w-6 h-6 rounded-full border border-stone-300 object-cover"
                                                             />
                                                         ) : (
-                                                            <div className="w-6 h-6 rounded-full border border-stone-300 bg-orange-600 flex items-center justify-center text-xs">
+                                                            <div className="w-6 h-6 rounded-full border border-stone-300 bg-emerald-600 flex items-center justify-center text-xs">
                                                                 {userAvatars[msg.userId] || "👤"}
                                                             </div>
                                                         )}
@@ -1170,7 +1170,7 @@ export default function RoomPage() {
                                                                 connectionStatuses[msg.userId] === "pending" ||
                                                                 connectionStatuses[msg.userId] === "accepted"
                                                             }
-                                                            className="hidden sm:inline opacity-0 group-hover:opacity-100 px-2 py-1 bg-orange-600/20 hover:bg-orange-600/40 border border-orange-500/30 rounded text-[8px] font-bold text-orange-400 hover:text-orange-300 uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            className="hidden sm:inline opacity-0 group-hover:opacity-100 px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/30 rounded text-[8px] font-bold text-emerald-400 hover:text-emerald-300 uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             {connectionStatuses[msg.userId] === "accepted"
                                                                 ? "Connected"
@@ -1200,7 +1200,7 @@ export default function RoomPage() {
                                                 )}
                                                 <div
                                                     className={`px-4 sm:px-5 lg:px-6 py-3 sm:py-4 rounded-3xl text-[13px] sm:text-[14px] font-medium leading-relaxed shadow-sm transition-all ${isMe
-                                                        ? "bg-orange-600 text-white rounded-tr-none hover:shadow-[0_10px_40px_rgba(59,130,246,0.15)]"
+                                                        ? "bg-emerald-600 text-white rounded-tr-none hover:shadow-[0_10px_40px_rgba(16,185,129,0.15)]"
                                                         : `${theme === "dark" ? "bg-stone-100/50 text-zinc-200" : "bg-white text-stone-900"} rounded-tl-none border border-stone-200/50 hover:bg-stone-100 transition-colors`
                                                         }`}
                                                 >
@@ -1235,7 +1235,7 @@ export default function RoomPage() {
                                                             : msg.timestamp;
                                                         if (!ts) return null;
                                                         return (
-                                                        <span className="text-[8px] text-orange-400/70 font-medium">
+                                                        <span className="text-[8px] text-emerald-400/70 font-medium">
                                                             {(() => {
                                                                 const createdTime = ts;
                                                                 const expiryTime =
@@ -1264,7 +1264,7 @@ export default function RoomPage() {
                                                     )}
                                                     <button
                                                         onClick={() => setReplyingTo(msg)}
-                                                        className="text-stone-500 hover:text-orange-400 transition-colors p-1 hover:bg-orange-500/10 rounded"
+                                                        className="text-stone-500 hover:text-emerald-400 transition-colors p-1 hover:bg-emerald-500/10 rounded"
                                                         title="Reply to message"
                                                     >
                                                         <Reply size={12} />
@@ -1292,7 +1292,7 @@ export default function RoomPage() {
                                                                 className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-stone-300 object-cover"
                                                             />
                                                         ) : (
-                                                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-stone-300 bg-orange-600 flex items-center justify-center text-xs">
+                                                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-stone-300 bg-emerald-600 flex items-center justify-center text-xs">
                                                                 {userAvatars[user.uid] || "👤"}
                                                             </div>
                                                         )}
@@ -1317,7 +1317,7 @@ export default function RoomPage() {
                                                                         }
                                                                     }}
                                                                     className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] sm:text-xs border transition-all ${users.includes(user?.uid)
-                                                                        ? "bg-orange-600/20 border-orange-500/50 text-orange-300"
+                                                                        ? "bg-emerald-600/20 border-emerald-500/50 text-emerald-300"
                                                                         : "bg-stone-200/50 border-stone-200/50 text-stone-500 hover:bg-stone-200/50"
                                                                         }`}
                                                                     title={`${users.length} reaction${users.length > 1 ? "s" : ""
@@ -1344,7 +1344,7 @@ export default function RoomPage() {
                                                                 handleAddReaction(msg.id, emoji);
                                                             }
                                                         }}
-                                                        className="text-[10px] sm:text-xs text-stone-500 hover:text-orange-400 transition-colors p-1 hover:bg-orange-500/10 rounded"
+                                                        className="text-[10px] sm:text-xs text-stone-500 hover:text-emerald-400 transition-colors p-1 hover:bg-emerald-500/10 rounded"
                                                         title="Add reaction"
                                                     >
                                                         + 😀
@@ -1364,15 +1364,15 @@ export default function RoomPage() {
                                     <div className="mb-2 sm:mb-3 flex items-center gap-2 text-stone-500 text-[10px] sm:text-xs">
                                         <div className="flex gap-1">
                                             <div
-                                                className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"
+                                                className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce"
                                                 style={{ animationDelay: "0ms" }}
                                             />
                                             <div
-                                                className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"
+                                                className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce"
                                                 style={{ animationDelay: "150ms" }}
                                             />
                                             <div
-                                                className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"
+                                                className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce"
                                                 style={{ animationDelay: "300ms" }}
                                             />
                                         </div>
@@ -1384,14 +1384,14 @@ export default function RoomPage() {
                                 )}
 
                                 {replyingTo && (
-                                    <div className="mb-2 sm:mb-3 p-3 bg-orange-600/10 border border-orange-500/30 rounded-xl">
+                                    <div className="mb-2 sm:mb-3 p-3 bg-emerald-600/10 border border-emerald-500/30 rounded-xl">
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-2">
-                                                <Reply size={14} className="text-orange-400" />
-                                                <span className="text-[10px] sm:text-xs font-bold text-orange-400 uppercase">
+                                                <Reply size={14} className="text-emerald-400" />
+                                                <span className="text-[10px] sm:text-xs font-bold text-emerald-400 uppercase">
                                                     Replying to
                                                 </span>
-                                                <span className="text-[10px] sm:text-xs text-orange-300">
+                                                <span className="text-[10px] sm:text-xs text-emerald-300">
                                                     {userNames[replyingTo.userId] || "Unknown"}
                                                 </span>
                                             </div>
@@ -1408,7 +1408,7 @@ export default function RoomPage() {
                                     </div>
                                 )}
 
-                                <div className="flex items-center gap-2 sm:gap-3 bg-stone-100/40 border border-stone-200/80 p-2 sm:p-3 rounded-2xl sm:rounded-[2rem] focus-within:border-orange-600/50 transition-all backdrop-blur-xl focus-within:shadow-[0_0_50px_rgba(59,130,246,0.05)]">
+                                <div className="flex items-center gap-2 sm:gap-3 bg-stone-100/40 border border-stone-200/80 p-2 sm:p-3 rounded-2xl sm:rounded-[2rem] focus-within:border-emerald-600/50 transition-all backdrop-blur-xl focus-within:shadow-[0_0_50px_rgba(16,185,129,0.05)]">
                                     <input
                                         className="flex-1 bg-transparent px-3 sm:px-5 py-2 sm:py-3 outline-none text-xs sm:text-sm placeholder:text-stone-600 placeholder:uppercase placeholder:text-[9px] sm:placeholder:text-[10px] placeholder:tracking-[0.25em] sm:placeholder:tracking-[0.3em] font-bold text-white"
                                         value={input}
@@ -1432,7 +1432,7 @@ export default function RoomPage() {
                                     <button
                                         onClick={handleSend}
                                         disabled={!input.trim()}
-                                        className="bg-white text-black h-10 w-10 sm:h-12 sm:w-12 flex items-center justify-center rounded-full hover:bg-orange-600 hover:text-white disabled:opacity-5 transition-all group active:scale-90 shadow-2xl"
+                                        className="bg-white text-black h-10 w-10 sm:h-12 sm:w-12 flex items-center justify-center rounded-full hover:bg-emerald-600 hover:text-white disabled:opacity-5 transition-all group active:scale-90 shadow-2xl"
                                     >
                                         <Send
                                             size={18}
@@ -1465,7 +1465,7 @@ export default function RoomPage() {
                             <div className="flex flex-col h-full p-5">
                                 <div className="flex items-center justify-between mb-6">
                                     <div className="flex items-center gap-2">
-                                        <Zap className="text-orange-500" fill="currentColor" size={20} />
+                                        <Zap className="text-emerald-500" fill="currentColor" size={20} />
                                         <span className="text-lg font-black italic tracking-tighter">
                                             DRIFT.
                                         </span>
@@ -1483,7 +1483,7 @@ export default function RoomPage() {
                                     {user ? (
                                         <div className="space-y-4">
                                             <div className="flex items-center gap-3 p-3 bg-stone-100/30 rounded-xl">
-                                                <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
+                                                <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
                                                     <User size={16} />
                                                 </div>
                                                 <div>
@@ -1510,7 +1510,7 @@ export default function RoomPage() {
                                     ) : (
                                         <button
                                             onClick={() => router.push("/")}
-                                            className="w-full flex items-center gap-3 p-4 bg-orange-600 hover:bg-blue-700 rounded-xl transition-all"
+                                            className="w-full flex items-center gap-3 p-4 bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all"
                                         >
                                             <Shield size={16} />
                                             <span className="text-sm font-medium">Secure Auth</span>
@@ -1530,14 +1530,14 @@ export default function RoomPage() {
                                             setCurrentChat("group");
                                         }}
                                         className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${currentChat === "group"
-                                            ? "bg-orange-600/20 border border-orange-500/30"
+                                            ? "bg-emerald-600/20 border border-emerald-500/30"
                                             : "hover:bg-stone-100/50"
                                             }`}
                                     >
                                         <Radio
                                             size={16}
                                             className={
-                                                currentChat === "group" ? "text-orange-400" : "text-stone-500"
+                                                currentChat === "group" ? "text-emerald-400" : "text-stone-500"
                                             }
                                         />
                                         <span className="text-sm font-medium">Public Chat</span>
@@ -1563,7 +1563,7 @@ export default function RoomPage() {
                                                             setCurrentChat(room.id);
                                                         }}
                                                         className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${currentChat === room.id
-                                                            ? "bg-purple-600/20 border border-purple-500/30"
+                                                            ? "bg-emerald-600/20 border border-emerald-500/30"
                                                             : "hover:bg-stone-100/50"
                                                             }`}
                                                     >
@@ -1571,7 +1571,7 @@ export default function RoomPage() {
                                                             size={16}
                                                             className={
                                                                 currentChat === room.id
-                                                                    ? "text-purple-400"
+                                                                    ? "text-emerald-400"
                                                                     : "text-stone-500"
                                                             }
                                                         />
@@ -1603,7 +1603,7 @@ export default function RoomPage() {
                                         <div className="text-[7px] font-black uppercase tracking-[0.35em] text-stone-600">
                                             DEVELOPED BY
                                         </div>
-                                        <div className="text-sm font-bold text-orange-400">
+                                        <div className="text-sm font-bold text-emerald-400">
                                             Parth Tiwari
                                         </div>
                                         <div className="text-[7px] text-stone-500 font-medium">
@@ -1648,7 +1648,7 @@ export default function RoomPage() {
                                     type="text"
                                     value={settingsTempDisplayName}
                                     onChange={(e) => setSettingsTempDisplayName(e.target.value)}
-                                    className="w-full bg-stone-100/50 border border-stone-200 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
+                                    className="w-full bg-stone-100/50 border border-stone-200 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
                                     placeholder="Enter your display name"
                                     maxLength={30}
                                 />
@@ -1681,7 +1681,7 @@ export default function RoomPage() {
                                             key={emoji}
                                             onClick={() => setSelectedAvatar(emoji)}
                                             className={`aspect-square rounded-xl border-2 text-2xl flex items-center justify-center transition-all ${selectedAvatar === emoji
-                                                ? "border-orange-500 bg-orange-500/20"
+                                                ? "border-emerald-500 bg-emerald-500/20"
                                                 : "border-stone-200 hover:border-stone-300"
                                                 }`}
                                         >
@@ -1697,7 +1697,7 @@ export default function RoomPage() {
                             <div className="border-t border-stone-200 pt-4">
                                 <p className="text-sm font-medium text-stone-500 mb-3">Preview</p>
                                 <div className="flex items-center gap-3 p-3 bg-stone-100/30 rounded-xl">
-                                    <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center text-lg">
+                                    <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-lg">
                                         {selectedAvatar || "👤"}
                                     </div>
                                     <div>
@@ -1718,7 +1718,7 @@ export default function RoomPage() {
                                 </button>
                                 <button
                                     onClick={handleSaveSettings}
-                                    className="flex-1 px-4 py-3 bg-orange-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium"
+                                    className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all font-medium"
                                 >
                                     Save
                                 </button>
@@ -1730,4 +1730,5 @@ export default function RoomPage() {
         </>
     );
 }
+
 
