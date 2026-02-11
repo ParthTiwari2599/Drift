@@ -4,17 +4,8 @@ import { useState, useEffect } from "react";
 import { AppModal } from "@/components/AppModal";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { createOrJoinRoom, getUserData, updateUserData, getRoom } from "@/lib/firestore";
-import { db } from "@/lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  limit,
-  onSnapshot,
-  orderBy,
-} from "firebase/firestore";
-import { listenToRoomPresenceUsers } from "@/lib/presence";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "convex/_generated/api";
 import {
   Hash,
   Plus,
@@ -43,10 +34,11 @@ interface Room {
   id: string;
   topic: string;
   active: boolean;
-  createdAt?: any;
+  createdAt?: number;
   isLocked?: boolean;
   createdBy?: string;
   passwordHash?: string | null;
+  activeCount?: number;
 }
 
 export default function Home() {
@@ -57,17 +49,19 @@ export default function Home() {
   const [roomPassword, setRoomPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPasswordFields, setShowPasswordFields] = useState(false);
-  const [activeRooms, setActiveRooms] = useState<Room[]>([]);
-  const [roomUserCounts, setRoomUserCounts] = useState<{
-    [roomId: string]: number;
-  }>({});
-  const [roomListeners, setRoomListeners] = useState<{
-    [roomId: string]: () => void;
-  }>({});
+  const roomsWithCounts = useQuery(api.rooms.listActiveRoomsWithCounts) || [];
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tempDisplayName, setTempDisplayName] = useState("");
   const [selectedAvatar, setSelectedAvatar] = useState("");
+
+  const createOrJoinRoom = useMutation(api.rooms.createOrJoinRoom);
+  const upsertUser = useMutation(api.users.upsertUser);
+  const cleanupExpiredMessages = useMutation(api.messages.cleanupExpiredMessages);
+  const userData = useQuery(
+    api.users.getUser,
+    user ? { userId: user.uid } : "skip"
+  );
 
   // Modal state for password input / generic prompts
   const [modal, setModal] = useState<{
@@ -85,32 +79,37 @@ export default function Home() {
 
   // Load user data when user changes
   useEffect(() => {
-    if (user) {
-      setTempDisplayName(user.displayName || "");
-      // Load user data from Firestore to get custom avatar
-      const loadUserData = async () => {
-        try {
-          const userData = await getUserData(user.uid);
-          if (userData?.customDisplayName) {
-            setTempDisplayName(userData.customDisplayName);
-          }
-          if (userData?.customAvatar) {
-            setSelectedAvatar(userData.customAvatar);
-          }
-        } catch (error) {
-          console.error("Error loading user data:", error);
-        }
-      };
-      loadUserData();
+    if (!user) return;
+    setTempDisplayName(user.displayName || "");
+    if (userData?.customDisplayName) {
+      setTempDisplayName(userData.customDisplayName);
     }
-  }, [user]);
+    if (userData?.customAvatar) {
+      setSelectedAvatar(userData.customAvatar);
+    }
+  }, [user, userData]);
+
+  // Client-side cleanup for expired group messages (no TTL / no Functions)
+  useEffect(() => {
+    const runCleanup = async () => {
+      try {
+        await cleanupExpiredMessages({});
+      } catch {
+        // ignore cleanup errors on client
+      }
+    };
+    runCleanup();
+    const interval = setInterval(runCleanup, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [cleanupExpiredMessages]);
 
   const handleSaveSettings = async () => {
     if (!user) return;
 
     try {
-      // Update display name and avatar in Firestore
-      await updateUserData(user.uid, {
+      // Update display name and avatar in Convex
+      await upsertUser({
+        userId: user.uid,
         customDisplayName: tempDisplayName,
         customAvatar: selectedAvatar,
       });
@@ -140,51 +139,7 @@ export default function Home() {
     )}&background=${colors[colorIndex].replace("#", "")}&color=fff&size=128`;
   };
 
-  // Logic section (No changes here except cleanup)
-  useEffect(() => {
-    if (!user) return;
-    const q = query(
-      collection(db, "rooms"),
-      where("active", "==", true),
-      orderBy("createdAt", "desc"),
-      limit(50)
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const rooms = snapshot.docs
-        .map(
-          (doc) =>
-            ({
-              id: doc.id,
-              ...doc.data(),
-            } as Room)
-        )
-        .sort((a, b) => {
-          if (!a.createdAt || !b.createdAt) return 0;
-          return b.createdAt.toMillis() - a.createdAt.toMillis();
-        });
-      setActiveRooms(rooms);
-      const newListeners: { [roomId: string]: () => void } = {};
-      rooms.forEach((room) => {
-        if (!roomListeners[room.id]) {
-          const userCountUnsubscribe = listenToRoomPresenceUsers(
-            room.id,
-            (users) => {
-              setRoomUserCounts((prev) => ({
-                ...prev,
-                [room.id]: users.length,
-              }));
-            }
-          );
-          newListeners[room.id] = userCountUnsubscribe;
-        } else {
-          newListeners[room.id] = roomListeners[room.id];
-        }
-      });
-      setRoomListeners(newListeners);
-    });
-    return () => unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  const activeRooms: Room[] = roomsWithCounts as Room[];
 
   const createRoom = async () => {
     if (!user || !roomName.trim()) return;
@@ -221,17 +176,11 @@ export default function Home() {
         }
       }
 
-      const slug = roomName
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9-]/g, "");
-
-      const room = await createOrJoinRoom(
-        slug,
-        isPasswordProtected ? roomPassword : undefined,
-        user.uid
-      );
+      const room = await createOrJoinRoom({
+        topic: roomName.trim(),
+        password: isPasswordProtected ? roomPassword : undefined,
+        userId: user.uid,
+      });
       router.push(`/room/${room.id}`);
     } catch (error) {
       setModal({
@@ -263,12 +212,11 @@ export default function Home() {
         onSubmit: async (password) => {
           if (!password) return;
           try {
-            // Fetch the room and check password
-            const roomData = await getRoom(room.id) as Room;
-            if (!roomData.passwordHash) throw new Error("No password set");
-            const bcrypt = await import('bcryptjs');
-            const isMatch = await bcrypt.compare(password, roomData.passwordHash);
-            if (!isMatch) throw new Error("Invalid password");
+            await createOrJoinRoom({
+              topic: room.topic,
+              password,
+              userId: user.uid,
+            });
             setModal((prev) => ({ ...prev, open: false }));
             router.push(`/room/${room.id}`);
           } catch (error) {
@@ -286,7 +234,6 @@ export default function Home() {
     }
   };
 
-  // Simple implementation for "Find Room" button using the existing modal
   const findAndOpenRoom = () => {
     if (!user) {
       setModal({
@@ -305,7 +252,10 @@ export default function Home() {
       onSubmit: async (value) => {
         if (!value) return;
         try {
-          const foundRoom = await createOrJoinRoom(value, undefined, user.uid);
+          const foundRoom = await createOrJoinRoom({
+            topic: value,
+            userId: user.uid,
+          });
           setModal((prev) => ({ ...prev, open: false }));
           router.push(`/room/${foundRoom.id}`);
         } catch (error) {
@@ -322,7 +272,7 @@ export default function Home() {
 
   if (loading)
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-blue-500 font-mono italic text-sm sm:text-base">
+      <div className="min-h-screen bg-stone-100 flex items-center justify-center text-orange-600 font-mono italic text-sm sm:text-base">
         INITIALIZING_DRIFT...
       </div>
     );
@@ -337,15 +287,15 @@ export default function Home() {
         onSubmit={modal.onSubmit}
       />
       <div
-        className={`min-h-screen bg-[#050505] text-white selection:bg-blue-500/30 ${
+        className={`min-h-screen bg-stone-100 text-stone-900 selection:bg-orange-500/30 ${
           isMobileMenuOpen ? "overflow-hidden" : ""
         }`}
       >
         {/* Desktop Sidebar */}
-        <aside className="hidden sm:flex w-80 bg-black/40 border-r border-white/10 flex-col backdrop-blur-2xl fixed left-0 top-0 h-full z-30">
-          <div className="p-8 border-b border-white/10">
+        <aside className="hidden sm:flex w-80 bg-white border-r border-stone-200 flex-col backdrop-blur-2xl fixed left-0 top-0 h-full z-30">
+          <div className="p-8 border-b border-stone-200">
             <div className="flex items-center gap-2 mb-6">
-              <Zap className="text-blue-500" fill="currentColor" size={20} />
+              <Zap className="text-orange-600" fill="currentColor" size={20} />
               <span className="text-lg font-black italic tracking-tighter">
                 DRIFT.
               </span>
@@ -354,23 +304,23 @@ export default function Home() {
             {/* User Status */}
             {user && !user.isAnonymous ? (
               <div className="space-y-4">
-                <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
-                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                <div className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl border border-stone-200">
+                  <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center text-white">
                     <User size={16} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">
+                    <p className="text-sm font-medium text-stone-900">
                       {user.displayName || "Anonymous"}
                     </p>
-                    <p className="text-xs text-zinc-500">Connected</p>
+                    <p className="text-xs text-stone-500 font-bold uppercase tracking-wider">Connected</p>
                   </div>
                 </div>
                 <button
                   onClick={signOut}
-                  className="w-full flex items-center gap-3 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition-all"
+                  className="w-full flex items-center gap-3 p-3 bg-stone-200/50 hover:bg-stone-200 border border-stone-300 rounded-xl transition-all"
                 >
-                  <LogOut size={16} className="text-red-400" />
-                  <span className="text-sm font-medium text-red-400">
+                  <LogOut size={16} className="text-stone-600" />
+                  <span className="text-sm font-medium text-stone-600">
                     Disconnect
                   </span>
                 </button>
@@ -378,7 +328,7 @@ export default function Home() {
             ) : (
               <button
                 onClick={signInWithGoogle}
-                className="w-full flex items-center gap-3 p-4 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all"
+                className="w-full flex items-center gap-3 p-4 bg-orange-600 hover:bg-orange-700 rounded-xl transition-all text-white shadow-lg shadow-orange-200"
               >
                 <Shield size={16} />
                 <span className="text-sm font-medium">Secure Auth</span>
@@ -388,15 +338,15 @@ export default function Home() {
 
           {/* Navigation Links */}
           <div className="flex-1 p-8 space-y-2">
-            <div className="text-xs font-black uppercase tracking-widest text-zinc-600 mb-4">
+            <div className="text-xs font-black uppercase tracking-widest text-stone-400 mb-4">
               Navigation
             </div>
 
             <button
               onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+              className="w-full flex items-center gap-3 p-3 hover:bg-stone-50 rounded-xl transition-all text-left"
             >
-              <House size={16} className="text-blue-400" />
+              <House size={16} className="text-orange-500" />
               <span className="text-sm font-medium">Home</span>
             </button>
 
@@ -408,9 +358,9 @@ export default function Home() {
                       .getElementById("active-rooms")
                       ?.scrollIntoView({ behavior: "smooth" });
                   }}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                  className="w-full flex items-center gap-3 p-3 hover:bg-stone-50 rounded-xl transition-all text-left"
                 >
-                  <MessageCircle size={16} className="text-green-400" />
+                  <MessageCircle size={16} className="text-orange-600" />
                   <span className="text-sm font-medium">
                     Active Rooms ({activeRooms.length})
                   </span>
@@ -422,27 +372,24 @@ export default function Home() {
                       .getElementById("create-room")
                       ?.scrollIntoView({ behavior: "smooth" });
                   }}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                  className="w-full flex items-center gap-3 p-3 hover:bg-stone-50 rounded-xl transition-all text-left"
                 >
-                  <Plus size={16} className="text-purple-400" />
+                  <Plus size={16} className="text-orange-600" />
                   <span className="text-sm font-medium">Create Room</span>
                 </button>
               </>
             )}
 
-            {/* FriendsList removed as requested */}
-                {/* FriendsList removed as requested */}
-
-            <div className="pt-4 border-t border-zinc-800/50 mt-8">
+            <div className="pt-4 border-t border-stone-200 mt-8">
               <button
                 onClick={() => {
                   setTempDisplayName(user?.displayName || "");
                   setSelectedAvatar("");
                   setShowSettingsModal(true);
                 }}
-                className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                className="w-full flex items-center gap-3 p-3 hover:bg-stone-50 rounded-xl transition-all text-left"
               >
-                <Settings size={16} className="text-zinc-400" />
+                <Settings size={16} className="text-stone-400" />
                 <span className="text-sm font-medium">Settings</span>
               </button>
             </div>
@@ -451,14 +398,14 @@ export default function Home() {
 
         <main className="sm:ml-80 min-h-screen">
           {/* --- HERO SECTION --- */}
-          <div className="relative border-b border-white/5">
+          <div className="relative border-b border-stone-200">
             <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-blue-600/10 blur-[120px] rounded-full opacity-50" />
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-orange-500/5 blur-[120px] rounded-full opacity-50" />
             </div>
 
             <nav className="relative z-10 flex justify-between items-center px-4 sm:px-6 py-6 max-w-7xl mx-auto">
-              <div className="flex items-center gap-2">
-                <Zap className="text-blue-500" fill="currentColor" />
+              <div className="flex items-center gap-2 sm:hidden">
+                <Zap className="text-orange-600" fill="currentColor" />
                 <span className="text-xl sm:text-2xl font-black italic tracking-tighter">
                   DRIFT.
                 </span>
@@ -469,14 +416,14 @@ export default function Home() {
                 {user && !user.isAnonymous ? (
                   <button
                     onClick={signOut}
-                    className="text-[10px] font-black uppercase tracking-widest border border-white/10 px-6 py-2 rounded-full hover:bg-red-500/10 transition-all"
+                    className="text-[10px] font-black uppercase tracking-widest border border-stone-200 px-6 py-2 rounded-full hover:bg-orange-500/10 transition-all"
                   >
                     Disconnect
                   </button>
                 ) : (
                   <button
                     onClick={signInWithGoogle}
-                    className="bg-white text-black text-[10px] font-black uppercase tracking-widest px-6 py-2 rounded-full"
+                    className="bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest px-6 py-2 rounded-full shadow-lg shadow-orange-200"
                   >
                     Secure Auth
                   </button>
@@ -486,7 +433,7 @@ export default function Home() {
               {/* Mobile Hamburger Menu */}
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="sm:hidden p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                className="sm:hidden p-2 hover:bg-white border border-stone-200 rounded-lg transition-all"
               >
                 {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
@@ -498,24 +445,21 @@ export default function Home() {
                 isMobileMenuOpen ? "block" : "hidden"
               }`}
             >
-              {/* Backdrop */}
               <div
-                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                className="absolute inset-0 bg-stone-900/20 backdrop-blur-sm"
                 onClick={() => setIsMobileMenuOpen(false)}
               />
 
-              {/* Sidebar */}
               <div
-                className={`absolute right-0 top-0 h-full w-80 bg-[#050505] border-l border-white/10 transform transition-transform duration-300 ease-in-out ${
+                className={`absolute right-0 top-0 h-full w-80 bg-stone-100 border-l border-stone-200 transform transition-transform duration-300 ease-in-out ${
                   isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
                 }`}
               >
                 <div className="flex flex-col h-full p-6">
-                  {/* Header */}
                   <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-2">
                       <Zap
-                        className="text-blue-500"
+                        className="text-orange-600"
                         fill="currentColor"
                         size={20}
                       />
@@ -525,33 +469,32 @@ export default function Home() {
                     </div>
                     <button
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                      className="p-2 hover:bg-white border border-stone-200 rounded-lg transition-all"
                     >
                       <X size={20} />
                     </button>
                   </div>
 
-                  {/* User Status */}
                   <div className="mb-8">
                     {user && !user.isAnonymous ? (
                       <div className="space-y-4">
-                        <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
-                          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                        <div className="flex items-center gap-3 p-3 bg-white border border-stone-200 rounded-xl">
+                          <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center text-white">
                             <User size={16} />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-white">
+                            <p className="text-sm font-medium text-stone-900">
                               {user.displayName || "Anonymous"}
                             </p>
-                            <p className="text-xs text-zinc-500">Connected</p>
+                            <p className="text-xs text-stone-500 font-bold uppercase tracking-wider">Connected</p>
                           </div>
                         </div>
                         <button
                           onClick={signOut}
-                          className="w-full flex items-center gap-3 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition-all"
+                          className="w-full flex items-center gap-3 p-3 bg-stone-200/50 hover:bg-stone-200 border border-stone-300 rounded-xl transition-all"
                         >
-                          <LogOut size={16} className="text-red-400" />
-                          <span className="text-sm font-medium text-red-400">
+                          <LogOut size={16} className="text-stone-600" />
+                          <span className="text-sm font-medium text-stone-600">
                             Disconnect
                           </span>
                         </button>
@@ -559,7 +502,7 @@ export default function Home() {
                     ) : (
                       <button
                         onClick={signInWithGoogle}
-                        className="w-full flex items-center gap-3 p-4 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all"
+                        className="w-full flex items-center gap-3 p-4 bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-lg shadow-orange-200 transition-all"
                       >
                         <Shield size={16} />
                         <span className="text-sm font-medium">Secure Auth</span>
@@ -567,9 +510,8 @@ export default function Home() {
                     )}
                   </div>
 
-                  {/* Navigation Links */}
                   <div className="flex-1 space-y-2">
-                    <div className="text-xs font-black uppercase tracking-widest text-zinc-600 mb-4">
+                    <div className="text-xs font-black uppercase tracking-widest text-stone-400 mb-4">
                       Navigation
                     </div>
 
@@ -578,10 +520,10 @@ export default function Home() {
                         setIsMobileMenuOpen(false);
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                      className="w-full flex items-center gap-3 p-3 hover:bg-white rounded-xl transition-all text-left"
                     >
-                      <House size={16} className="text-blue-400" />
-                      <span className="text-sm font-medium">Home</span>
+                      <House size={16} className="text-orange-500" />
+                      <span className="text-sm font-medium text-stone-900">Home</span>
                     </button>
 
                     {user && !user.isAnonymous && (
@@ -589,18 +531,17 @@ export default function Home() {
                         <button
                           onClick={() => {
                             setIsMobileMenuOpen(false);
-                            // Scroll to active rooms section
                             document
                               .getElementById("active-rooms")
                               ?.scrollIntoView({ behavior: "smooth" });
                           }}
-                          className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                          className="w-full flex items-center gap-3 p-3 hover:bg-white rounded-xl transition-all text-left"
                         >
                           <MessageCircle
                             size={16}
-                            className="text-green-400"
+                            className="text-orange-600"
                           />
-                          <span className="text-sm font-medium">
+                          <span className="text-sm font-medium text-stone-900">
                             Active Rooms ({activeRooms.length})
                           </span>
                         </button>
@@ -608,15 +549,14 @@ export default function Home() {
                         <button
                           onClick={() => {
                             setIsMobileMenuOpen(false);
-                            // Scroll to room creation form
                             document
                               .getElementById("create-room")
                               ?.scrollIntoView({ behavior: "smooth" });
                           }}
-                          className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                          className="w-full flex items-center gap-3 p-3 hover:bg-white rounded-xl transition-all text-left"
                         >
-                          <Plus size={16} className="text-purple-400" />
-                          <span className="text-sm font-medium">
+                          <Plus size={16} className="text-orange-600" />
+                          <span className="text-sm font-medium text-stone-900">
                             Create Room
                           </span>
                         </button>
@@ -630,26 +570,25 @@ export default function Home() {
                         setIsMobileMenuOpen(false);
                         setShowSettingsModal(true);
                       }}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                      className="w-full flex items-center gap-3 p-3 hover:bg-white rounded-xl transition-all text-left"
                     >
-                      <Settings size={16} className="text-zinc-400" />
-                      <span className="text-sm font-medium">Settings</span>
+                      <Settings size={16} className="text-stone-400" />
+                      <span className="text-sm font-medium text-stone-900">Settings</span>
                     </button>
                   </div>
 
-                  {/* Footer */}
-                  <div className="border-t border-white/10 pt-6 space-y-3">
+                  <div className="border-t border-stone-200 pt-6 space-y-3">
                     <div className="text-center space-y-2">
-                      <div className="text-[8px] font-black uppercase tracking-[0.4em] text-zinc-700">
+                      <div className="text-[8px] font-black uppercase tracking-[0.4em] text-stone-400">
                         DEVELOPED BY
                       </div>
-                      <div className="text-sm font-bold text-blue-400">
+                      <div className="text-sm font-bold text-orange-600">
                         Parth Tiwari
                       </div>
-                      <div className="text-[7px] text-zinc-500 font-medium">
+                      <div className="text-[7px] text-stone-500 font-medium">
                         GitHub: @parthtiwari2599
                       </div>
-                      <div className="text-[7px] text-zinc-500 font-medium">
+                      <div className="text-[7px] text-stone-500 font-medium">
                         parthtiwari2599@gmail.com
                       </div>
                     </div>
@@ -660,18 +599,18 @@ export default function Home() {
 
             <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-10 sm:pt-20 pb-16 sm:pb-32 grid lg:grid-cols-2 gap-10 sm:gap-20 items-center">
               <div className="space-y-6 sm:space-y-8">
-                <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter italic leading-[0.8]">
-                  VANISH <br /> <span className="text-blue-500">INTO</span>{" "}
+                <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter italic leading-[0.8] text-stone-900">
+                  VANISH <br /> <span className="text-orange-600">INTO</span>{" "}
                   <br /> DATA.
                 </h1>
-                <p className="text-zinc-500 text-lg sm:text-xl max-w-md font-medium">
+                <p className="text-stone-500 text-lg sm:text-xl max-w-md font-medium leading-relaxed">
                   DRIFT is an ephemeral communication layer where messages
                   don't last, but impact does.
                 </p>
                 {(!user || user.isAnonymous) && (
                   <button
                     onClick={signInWithGoogle}
-                    className="flex items-center gap-3 sm:gap-4 bg-blue-600 px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-105 transition-all"
+                    className="flex items-center gap-3 sm:gap-4 bg-orange-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-orange-700 transition-all shadow-xl shadow-orange-200"
                   >
                     Start Drifting <ArrowRight size={20} />
                   </button>
@@ -681,10 +620,10 @@ export default function Home() {
               {user && !user.isAnonymous && (
                 <div
                   id="create-room"
-                  className="bg-zinc-900/30 border border-white/5 p-6 sm:p-8 md:p-12 rounded-[2rem] sm:rounded-[3rem] backdrop-blur-xl shadow-2xl w-full max-w-lg mx-auto lg:mx-0"
+                  className="bg-white border border-stone-200 p-6 sm:p-8 md:p-12 rounded-[2rem] sm:rounded-[3rem] shadow-2xl shadow-stone-200/50 w-full max-w-lg mx-auto lg:mx-0"
                 >
-                  <h2 className="text-lg sm:text-xl font-black uppercase tracking-widest mb-6 sm:mb-8 flex items-center gap-3">
-                    <Terminal size={20} className="text-blue-500" /> New Signal
+                  <h2 className="text-lg sm:text-xl font-black uppercase tracking-widest mb-6 sm:mb-8 flex items-center gap-3 text-stone-900">
+                    <Terminal size={20} className="text-orange-600" /> New Signal
                   </h2>
                   <div className="space-y-4 sm:space-y-6">
                     <input
@@ -692,7 +631,7 @@ export default function Home() {
                       value={roomName}
                       onChange={(e) => setRoomName(e.target.value)}
                       placeholder="Room Name..."
-                      className="w-full bg-black border border-white/5 rounded-2xl px-4 sm:px-6 py-3 sm:py-4 outline-none focus:border-blue-500 transition-all font-bold text-sm sm:text-base"
+                      className="w-full bg-stone-50 border border-stone-200 rounded-2xl px-4 sm:px-6 py-3 sm:py-4 outline-none focus:border-orange-500 transition-all font-bold text-sm sm:text-base text-stone-900"
                     />
 
                     {/* Password Protection Toggle */}
@@ -709,9 +648,9 @@ export default function Home() {
                               setConfirmPassword("");
                             }
                           }}
-                          className="w-4 h-4 text-blue-600 bg-zinc-800 border-zinc-600 rounded focus:ring-blue-500 focus:ring-2"
+                          className="w-4 h-4 text-orange-600 bg-stone-100 border-stone-300 rounded focus:ring-orange-500 focus:ring-2"
                         />
-                        <span className="text-xs sm:text-sm text-zinc-400 font-medium">
+                        <span className="text-xs sm:text-sm text-stone-500 font-medium">
                           Make room password protected
                         </span>
                       </label>
@@ -719,14 +658,14 @@ export default function Home() {
 
                     {/* Password Fields */}
                     {showPasswordFields && (
-                      <div className="space-y-3 sm:space-y-4 p-3 sm:p-4 bg-zinc-900/30 border border-zinc-800/50 rounded-2xl">
+                      <div className="space-y-3 sm:space-y-4 p-3 sm:p-4 bg-stone-50 border border-stone-200 rounded-2xl">
                         <div>
                           <input
                             type="password"
                             value={roomPassword}
                             onChange={(e) => setRoomPassword(e.target.value)}
                             placeholder="Enter password (min 4 characters)"
-                            className="w-full bg-black border border-zinc-700 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 font-medium text-sm sm:text-base"
+                            className="w-full bg-white border border-stone-300 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-stone-900 placeholder-stone-400 focus:outline-none focus:border-orange-500 font-medium text-sm sm:text-base"
                           />
                         </div>
                         <div>
@@ -735,10 +674,10 @@ export default function Home() {
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             placeholder="Confirm password"
-                            className="w-full bg-black border border-zinc-700 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 font-medium text-sm sm:text-base"
+                            className="w-full bg-white border border-stone-300 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-stone-900 placeholder-stone-400 focus:outline-none focus:border-orange-500 font-medium text-sm sm:text-base"
                           />
                         </div>
-                        <div className="text-xs text-zinc-500 font-medium">
+                        <div className="text-xs text-stone-400 font-medium">
                           Password will be required for all users to join this
                           room
                         </div>
@@ -747,7 +686,7 @@ export default function Home() {
 
                     <button
                       onClick={createRoom}
-                      className="w-full bg-white text-black py-4 sm:py-5 rounded-2xl font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-blue-600 hover:text-white transition-all"
+                      className="w-full bg-stone-900 text-white py-4 sm:py-5 rounded-2xl font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-orange-600 transition-all shadow-lg"
                     >
                       Establish Connection
                     </button>
@@ -765,21 +704,21 @@ export default function Home() {
             >
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 sm:mb-12 gap-4 sm:gap-6">
                 <div className="space-y-2">
-                  <span className="text-blue-500 font-black uppercase tracking-[0.3em] text-[10px]">
+                  <span className="text-orange-600 font-black uppercase tracking-[0.3em] text-[10px]">
                     Network Monitor
                   </span>
-                  <h2 className="text-3xl sm:text-4xl font-black italic tracking-tighter">
+                  <h2 className="text-3xl sm:text-4xl font-black italic tracking-tighter text-stone-900">
                     ACTIVE UPLINKS
                   </h2>
                 </div>
                 <div className="flex items-center gap-4">
-                  <p className="text-zinc-500 max-w-xs text-sm font-medium">
+                  <p className="text-stone-500 max-w-xs text-sm font-medium">
                     Real-time signals currently broadcasting on the DRIFT
                     protocol.
                   </p>
                   <button
                     onClick={findAndOpenRoom}
-                    className="px-3 py-2 bg-zinc-900/40 border border-white/5 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all"
+                    className="px-4 py-2 bg-white border border-stone-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-stone-600 hover:text-orange-600 transition-all shadow-sm"
                   >
                     Find Room
                   </button>
@@ -791,30 +730,29 @@ export default function Home() {
                   <div
                     key={room.id}
                     onClick={() => joinRoom(room)}
-                    className="group bg-zinc-900/20 border border-white/5 p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] cursor-pointer hover:border-blue-500/50 transition-all"
+                    className="group bg-white border border-stone-200 p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] cursor-pointer hover:border-orange-500 hover:shadow-xl hover:shadow-orange-100 transition-all"
                   >
-                    <div className="flex items-center gap-3 mb-4 sm:mb-6">
-                      <Hash
-                        className="text-zinc-800 group-hover:text-blue-500 transition-colors"
-                        size={32}
-                      />
-                      {room.isLocked && <Lock className="text-yellow-500" size={20} />}
+                    <div className="flex items-center justify-between mb-4 sm:mb-6">
+                      <div className="p-3 bg-stone-50 rounded-2xl group-hover:bg-orange-50 transition-colors">
+                        <Hash
+                          className="text-stone-400 group-hover:text-orange-600"
+                          size={28}
+                        />
+                      </div>
+                      {room.isLocked && <Lock className="text-orange-400" size={20} />}
                     </div>
-                    <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2 flex items-center gap-2">
+                    <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2 flex items-center gap-2 text-stone-800">
                       {room.topic}
-                      {room.isLocked && (
-                        <Lock className="text-yellow-500" size={14} />
-                      )}
                     </h3>
                     <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                      <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">
-                        {roomUserCounts[room.id] || 0} Nodes
+                      <div className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse" />
+                      <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
+                        {room.activeCount || 0} Nodes
                       </span>
                     </div>
                     {room.isLocked && (
-                      <p className="text-xs text-yellow-500 mt-2 opacity-0 group-hover:opacity-100 transition-opacity font-medium">
-                        Password required
+                      <p className="text-xs text-orange-600 mt-2 opacity-0 group-hover:opacity-100 transition-opacity font-bold">
+                        PASSWORD_PROTECTED
                       </p>
                     )}
                   </div>
@@ -824,12 +762,12 @@ export default function Home() {
           )}
 
           {/* --- "WHAT IS DRIFT" SECTION (THE STORY) --- */}
-          <section className="bg-white/5 py-16 sm:py-32 border-y border-white/5">
+          <section className="bg-white py-16 sm:py-32 border-y border-stone-200">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 grid md:grid-cols-2 gap-10 sm:gap-20 items-center">
-              <div className="relative aspect-square bg-zinc-900 rounded-[3rem] sm:rounded-[4rem] overflow-hidden border border-white/10 group order-2 md:order-1">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-purple-600/20 opacity-50" />
+              <div className="relative aspect-square bg-stone-100 rounded-[3rem] sm:rounded-[4rem] overflow-hidden border border-stone-200 group order-2 md:order-1">
+                <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-orange-200/20 opacity-50" />
                 <div className="absolute inset-0 flex items-center justify-center p-8 sm:p-12">
-                  <div className="space-y-3 sm:space-y-4 font-mono text-[9px] sm:text-[10px] text-blue-400 opacity-40 group-hover:opacity-100 transition-opacity">
+                  <div className="space-y-3 sm:space-y-4 font-mono text-[9px] sm:text-[10px] text-orange-600 opacity-40 group-hover:opacity-100 transition-opacity">
                     <p>{">"} INITIALIZING SECURE_LAYER...</p>
                     <p>{">"} ENCRYPTING END_TO_END...</p>
                     <p>{">"} DELETING METADATA...</p>
@@ -838,10 +776,10 @@ export default function Home() {
                 </div>
               </div>
               <div className="space-y-6 sm:space-y-8 order-1 md:order-2">
-                <h2 className="text-4xl sm:text-5xl font-black italic tracking-tighter">
+                <h2 className="text-4xl sm:text-5xl font-black italic tracking-tighter text-stone-900 uppercase">
                   BUILT FOR <br /> SILENCE.
                 </h2>
-                <div className="space-y-4 sm:space-y-6 text-zinc-400 leading-relaxed">
+                <div className="space-y-4 sm:space-y-6 text-stone-500 leading-relaxed font-medium">
                   <p>
                     DRIFT is not just another chat app. It's a response to the
                     era of surveillance. We believe your conversations should
@@ -849,8 +787,8 @@ export default function Home() {
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 pt-6 sm:pt-8">
                     <div className="space-y-2">
-                      <Shield className="text-blue-500" size={24} />
-                      <h4 className="font-black text-xs uppercase tracking-widest text-white">
+                      <Shield className="text-orange-600" size={24} />
+                      <h4 className="font-black text-xs uppercase tracking-widest text-stone-900">
                         No Persistence
                       </h4>
                       <p className="text-[10px]">
@@ -858,8 +796,8 @@ export default function Home() {
                       </p>
                     </div>
                     <div className="space-y-2">
-                      <Sparkles className="text-purple-500" size={24} />
-                      <h4 className="font-black text-xs uppercase tracking-widest text-white">
+                      <Sparkles className="text-orange-500" size={24} />
+                      <h4 className="font-black text-xs uppercase tracking-widest text-stone-900">
                         Identity Fluid
                       </h4>
                       <p className="text-[10px]">
@@ -874,113 +812,71 @@ export default function Home() {
             {/* Settings Modal */}
             {showSettingsModal && (
               <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-                {/* Backdrop */}
                 <div
-                  className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                  className="absolute inset-0 bg-stone-900/20 backdrop-blur-sm"
                   onClick={() => setShowSettingsModal(false)}
                 />
 
-                {/* Modal */}
-                <div className="relative bg-[#050505] border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+                <div className="relative bg-white border border-stone-200 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
                   <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-black text-white">Settings</h3>
+                    <h3 className="text-lg font-black text-stone-900">Settings</h3>
                     <button
                       onClick={() => setShowSettingsModal(false)}
-                      className="p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                      className="p-2 hover:bg-stone-50 border border-stone-200 rounded-lg transition-all"
                     >
-                      <X size={20} />
+                      <X size={20} className="text-stone-500" />
                     </button>
                   </div>
 
                   <div className="space-y-6">
-                    {/* Display Name */}
                     <div>
-                      <label className="block text-sm font-medium text-zinc-400 mb-2">
+                      <label className="block text-xs font-black uppercase tracking-widest text-stone-400 mb-2">
                         Display Name
                       </label>
                       <input
                         type="text"
                         value={tempDisplayName}
                         onChange={(e) => setTempDisplayName(e.target.value)}
-                        className="w-full bg-zinc-900/50 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-900 placeholder-stone-400 focus:outline-none focus:border-orange-500 font-bold"
                         placeholder="Enter your display name"
                         maxLength={30}
                       />
                     </div>
 
-                    {/* Avatar Selection */}
                     <div>
-                      <label className="block text-sm font-medium text-zinc-400 mb-3">
+                      <label className="block text-xs font-black uppercase tracking-widest text-stone-400 mb-3">
                         Choose Avatar
                       </label>
                       <div className="grid grid-cols-4 gap-3">
                         {[
-                          "👤",
-                          "🎭",
-                          "🤖",
-                          "👨‍💻",
-                          "👩‍💻",
-                          "🦊",
-                          "🐺",
-                          "🐱",
-                          "🦁",
-                          "🐼",
-                          "🐨",
-                          "🦄",
-                          "🐉",
-                          "🌟",
-                          "⚡",
-                          "🔥",
+                          "👤", "🎭", "🤖", "👨‍💻", "👩‍💻", "🦊", "🐺", "🐱",
+                          "🦁", "🐼", "🐨", "🦄", "🐉", "🌟", "⚡", "🔥",
                         ].map((emoji) => (
                           <button
                             key={emoji}
                             onClick={() => setSelectedAvatar(emoji)}
                             className={`aspect-square rounded-xl border-2 text-2xl flex items-center justify-center transition-all ${
                               selectedAvatar === emoji
-                                ? "border-blue-500 bg-blue-500/20"
-                                : "border-zinc-700 hover:border-zinc-500"
+                                ? "border-orange-500 bg-orange-50"
+                                : "border-stone-100 hover:border-stone-300"
                             }`}
                           >
                             {emoji}
                           </button>
                         ))}
                       </div>
-                      <p className="text-xs text-zinc-500 mt-2">
-                        Selected: {selectedAvatar || "None"}
-                      </p>
                     </div>
 
-                    {/* Preview */}
-                    <div className="border-t border-zinc-800 pt-4">
-                      <p className="text-sm font-medium text-zinc-400 mb-3">
-                        Preview
-                      </p>
-                      <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
-                        <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-lg">
-                          {selectedAvatar || "👤"}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-white">
-                            {tempDisplayName || "Anonymous"}
-                          </p>
-                          <p className="text-xs text-zinc-500">
-                            Your new profile
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
                     <div className="flex gap-3 pt-4">
                       <button
                         onClick={() => setShowSettingsModal(false)}
-                        className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all font-medium"
+                        className="flex-1 px-4 py-3 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-xl transition-all font-bold text-sm"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={handleSaveSettings}
-                        className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium"
+                        className="flex-1 px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl transition-all font-bold text-sm shadow-lg shadow-orange-100"
                       >
                         Save
                       </button>
@@ -994,10 +890,10 @@ export default function Home() {
           {/* --- HOW IT WORKS GRID --- */}
           <section className="max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-32 space-y-12 sm:space-y-20">
             <div className="text-center space-y-3 sm:space-y-4">
-              <h2 className="text-4xl sm:text-6xl font-black italic tracking-tighter">
+              <h2 className="text-4xl sm:text-6xl font-black italic tracking-tighter text-stone-900 uppercase">
                 PROTOCOL PHASES
               </h2>
-              <p className="text-zinc-500 uppercase tracking-[0.3em] text-[10px] font-bold">
+              <p className="text-stone-400 uppercase tracking-[0.3em] text-[10px] font-bold">
                 Follow the sequence to begin communication
               </p>
             </div>
@@ -1027,15 +923,15 @@ export default function Home() {
               ].map((item, i) => (
                 <div
                   key={i}
-                  className="p-6 sm:p-10 border border-white/5 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-6 hover:bg-zinc-900/40 transition-all"
+                  className="p-6 sm:p-10 bg-white border border-stone-200 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-6 hover:border-orange-300 hover:shadow-xl hover:shadow-orange-50 transition-all"
                 >
-                  <span className="text-3xl sm:text-4xl font-black text-blue-500 opacity-20">
+                  <span className="text-3xl sm:text-4xl font-black text-orange-600 opacity-20">
                     {item.step}
                   </span>
-                  <h3 className="text-lg sm:text-xl font-black italic tracking-tight">
+                  <h3 className="text-lg sm:text-xl font-black italic tracking-tight text-stone-800">
                     {item.title}
                   </h3>
-                  <p className="text-xs sm:text-sm text-zinc-500 leading-relaxed font-medium">
+                  <p className="text-xs sm:text-sm text-stone-500 leading-relaxed font-medium">
                     {item.desc}
                   </p>
                 </div>
@@ -1044,44 +940,43 @@ export default function Home() {
           </section>
 
           {/* --- FOOTER --- */}
-          <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-20 border-t border-white/5 flex flex-col gap-8 sm:gap-12">
+          <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-20 border-t border-stone-200 flex flex-col gap-8 sm:gap-12">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-6 sm:gap-8">
               <div className="flex items-center gap-2 opacity-50">
-                <Zap size={14} fill="white" />
-                <span className="font-black italic tracking-tighter text-lg sm:text-xl">
+                <Zap size={14} fill="#57534e" className="text-stone-600" />
+                <span className="font-black italic tracking-tighter text-lg sm:text-xl text-stone-800">
                   DRIFT. v2.0
                 </span>
               </div>
 
               {/* Contact Information */}
               <div className="text-center space-y-2 order-3 sm:order-2">
-                <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.4em] text-zinc-700">
+                <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.4em] text-stone-300">
                   DEVELOPED BY
                 </div>
-                <div className="text-sm sm:text-base font-bold text-blue-400">
+                <div className="text-sm sm:text-base font-bold text-orange-600">
                   Parth Tiwari
                 </div>
-                <div className="text-[8px] sm:text-[9px] text-zinc-500 font-medium">
+                <div className="text-[8px] sm:text-[9px] text-stone-500 font-medium">
                   GitHub: @parthtiwari2599
                 </div>
-                <div className="text-[8px] sm:text-[9px] text-zinc-500 font-medium">
+                <div className="text-[8px] sm:text-[9px] text-stone-500 font-medium">
                   Email: parthtiwari2599@gmail.com
                 </div>
-                <div className="text-[7px] sm:text-[8px] text-zinc-600 font-black uppercase tracking-widest mt-2">
+                <div className="text-[7px] sm:text-[8px] text-stone-400 font-black uppercase tracking-widest mt-2">
                   Suggestions & Contributions Welcome
                 </div>
               </div>
 
-              <div className="flex flex-wrap justify-center gap-4 sm:gap-6 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-zinc-500 order-2 sm:order-3">
-                <span>Terminal</span>
-                <span>Security</span>
-                <span>GitHub</span>
+              <div className="flex flex-wrap justify-center gap-4 sm:gap-6 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-stone-400 order-2 sm:order-3">
+                <span className="hover:text-orange-600 cursor-pointer transition-colors">Terminal</span>
+                <span className="hover:text-orange-600 cursor-pointer transition-colors">Security</span>
+                <span className="hover:text-orange-600 cursor-pointer transition-colors">GitHub</span>
               </div>
             </div>
 
-            {/* Mobile-friendly copyright */}
             <div className="text-center">
-              <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.4em] text-zinc-700">
+              <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.4em] text-stone-300">
                 © 2026 ZERO_LOG_SYSTEMS_LLC
               </p>
             </div>

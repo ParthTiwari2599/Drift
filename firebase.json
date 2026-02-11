@@ -3,9 +3,10 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  // "storage": {
-  //   "rules": "storage.rules"
-  // }, // ❌ Disabled - using Cloudinary instead
+  "functions": {
+    "source": "functions"
+  },
+  
   "emulators": {
     "dataconnect": {
       "dataDir": "dataconnect/.dataconnect/pgliteData"

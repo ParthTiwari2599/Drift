@@ -1,24 +1,8 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
-// Debounce utility
-function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
-    let timer: NodeJS.Timeout;
-    return (...args: Parameters<T>) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => fn(...args), delay);
-    };
-}
+import { useState, useEffect, useRef, useMemo } from "react";
 import { AppModal } from "@/components/AppModal";
-import { getRoom, getUserData, updateUserData } from "@/lib/firestore";
-import {
-    sendMessageToRoom,
-    listenToRoomMessages,
-    addReactionToMessage,
-    removeReactionFromMessage,
-    cleanupExpiredMessages,
-} from "@/lib/messages";
 import {
     sendConnectRequest,
     listenIncomingRequests,
@@ -28,21 +12,15 @@ import {
     listenSentRequests,
 } from "@/lib/connect";
 import { useAuth } from "@/hooks/useAuth";
-import {
-    listenToRoomPresenceUsers,
-    joinRoomPresence,
-    leaveRoomPresence,
-    heartbeatPresence,
-} from "@/lib/presence";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "convex/_generated/api";
 import React from "react";
 import { listenMyPrivateRooms } from "@/lib/privateRooms";
 import { sendPrivateMessage, listenPrivateMessages } from "@/lib/privateMessages";
-import { deleteRoom } from "@/lib/firestore";
-import { db, generateRandomAvatar, generateAvatarFromName } from "@/lib/firebase";
-import { collection, query, where, getDocs, deleteDoc, doc, onSnapshot } from "firebase/firestore";
+import { db, generateRandomAvatar } from "@/lib/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import {
     Send,
-    Users,
     ChevronLeft,
     ShieldCheck,
     UserCheck,
@@ -71,13 +49,22 @@ import {
 } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 
-
+const THEME = {
+    bg: "bg-stone-100",
+    sidebar: "bg-white",
+    card: "bg-white",
+    accent: "orange-600",
+    textPrimary: "text-stone-900",
+    textSecondary: "text-stone-500",
+    border: "border-stone-200",
+    inputBg: "bg-stone-50"
+};
 
 const NodesOnline = React.memo(function NodesOnline({ count }: { count: number }) {
     return (
-        <div className="flex items-center gap-2 mt-3 bg-blue-600/5 w-fit px-3 py-1 rounded-full border border-blue-500/10">
-            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_#3b82f6]" />
-            <p className="text-[10px] text-blue-400 uppercase tracking-widest font-black">
+        <div className="flex items-center gap-2 mt-3 bg-orange-600/5 w-fit px-3 py-1 rounded-full border border-orange-500/10">
+            <div className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse shadow-[0_0_8px_#ea580c]" />
+            <p className="text-[10px] text-orange-400 uppercase tracking-widest font-black">
                 {count} Nodes Online
             </p>
         </div>
@@ -105,18 +92,32 @@ export default function RoomPage() {
     const { roomId } = useParams();
     const router = useRouter();
     const { user } = useAuth();
+    const roomIdParam = Array.isArray(roomId) ? roomId[0] : roomId;
+
+    const roomData = useQuery(
+        api.rooms.getRoom,
+        roomIdParam ? { roomId: roomIdParam } : "skip"
+    );
+    const roomLoading = roomData === undefined;
+
+    const groupMessages =
+        useQuery(
+            api.messages.listRoomMessages,
+            roomIdParam ? { roomId: roomIdParam } : "skip"
+        ) || [];
+    const activeUsers =
+        useQuery(
+            api.presence.listRoomPresenceUsers,
+            roomIdParam ? { roomId: roomIdParam } : "skip"
+        ) || [];
+    const activeCount = activeUsers.length;
 
     const [input, setInput] = useState("");
-    const [messages, setMessages] = useState<any[]>([]);
-    const [activeCount, setActiveCount] = useState(0);
-    const [activeUsers, setActiveUsers] = useState<any[]>([]);
     const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
     const [sentRequests, setSentRequests] = useState<string[]>([]);
     const [privateRooms, setPrivateRooms] = useState<any[]>([]);
     const [currentChat, setCurrentChat] = useState<"group" | string>("group");
     const [privateMessages, setPrivateMessages] = useState<{ [roomId: string]: any[] }>({});
-    const [roomData, setRoomData] = useState<any>(null);
-    const [roomLoading, setRoomLoading] = useState(true);
     const [userNames, setUserNames] = useState<{ [uid: string]: string }>({});
     const [isEditingName, setIsEditingName] = useState(false);
     const [tempDisplayName, setTempDisplayName] = useState("");
@@ -132,6 +133,7 @@ export default function RoomPage() {
     const [theme, setTheme] = useState<"dark" | "light">("dark");
     const [replyingTo, setReplyingTo] = useState<any>(null);
     const [encryptionEnabled, setEncryptionEnabled] = useState(false);
+    const [isAtBottom, setIsAtBottom] = useState(true);
     const [userAvatars, setUserAvatars] = useState<{ [uid: string]: string }>({});
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [settingsTempDisplayName, setSettingsTempDisplayName] = useState("");
@@ -145,60 +147,49 @@ export default function RoomPage() {
     // No React state for chunks: use local variable
     let localChunks: BlobPart[] = [];
 
+    const displayedMessages =
+        currentChat === "group"
+            ? groupMessages
+            : privateMessages[currentChat] || [];
+
+    const sendMessageToRoom = useMutation(api.messages.sendMessageToRoom);
+    const addReactionToMessage = useMutation(api.messages.addReactionToMessage);
+    const removeReactionFromMessage = useMutation(api.messages.removeReactionFromMessage);
+    const deleteMessageMutation = useMutation(api.messages.deleteMessage);
+    const cleanupExpiredMessages = useMutation(api.messages.cleanupExpiredMessages);
+    const joinRoomPresence = useMutation(api.presence.joinRoomPresence);
+    const heartbeatPresence = useMutation(api.presence.heartbeatPresence);
+    const leaveRoomPresence = useMutation(api.presence.leaveRoomPresence);
+    const deleteRoomMutation = useMutation(api.rooms.deleteRoom);
+    const upsertUser = useMutation(api.users.upsertUser);
+
+    const userIdsForNames = useMemo(() => {
+        const ids = new Set<string>();
+        if (user?.uid) ids.add(user.uid);
+        activeUsers.forEach((u: any) => {
+            if (u.userId) ids.add(u.userId);
+        });
+        privateRooms.forEach((room: any) => {
+            if (room.userA) ids.add(room.userA);
+            if (room.userB) ids.add(room.userB);
+        });
+        return Array.from(ids);
+    }, [activeUsers, privateRooms, user?.uid]);
+
+    const usersByIds = useQuery(
+        api.users.getUsersByIds,
+        userIdsForNames.length ? { userIds: userIdsForNames } : "skip"
+    );
+
     const bottomRef = useRef<HTMLDivElement | null>(null);
+    const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const welcomeSentRef = useRef(false);
 
-    // LOGIC: Unchanged (As requested)
-    useEffect(() => {
-        if (!roomId) return;
-        getRoom(roomId as string)
-            .then((room) => {
-                setRoomData(room);
-                setRoomLoading(false);
-            })
-            .catch(() => setRoomLoading(false));
-    }, [roomId]);
-
-    // Throttle activeCount updates to once per minute to reduce Firestore reads
-    useEffect(() => {
-        if (!roomId) return;
-        let isMounted = true;
-        let intervalId: NodeJS.Timeout | null = null;
-
-        async function fetchActiveCount() {
-            try {
-                const q = query(collection(db, "presence"), where("roomId", "==", roomId));
-                const snapshot = await getDocs(q);
-                const now = Date.now();
-                const ACTIVE_WINDOW = 30000;
-                const activeUsers = snapshot.docs.filter((d) => {
-                    const data: any = d.data();
-                    if (!data.lastActive) return false;
-                    const last = data.lastActive.toMillis ? data.lastActive.toMillis() : now;
-                    return now - last < ACTIVE_WINDOW;
-                });
-                if (isMounted) setActiveCount(activeUsers.length);
-            } catch (e) {
-                // Optionally handle error
-            }
-        }
-
-        fetchActiveCount();
-        intervalId = setInterval(fetchActiveCount, 60000); // 1 minute
-
-        return () => {
-            isMounted = false;
-            if (intervalId) clearInterval(intervalId);
-        };
-    }, [roomId]);
+    // roomData is provided by Convex query
 
     useEffect(() => {
-        if (!roomId || !user) return;
-        // Debounced setter for active users
-        const debouncedSetActiveUsers = debounce(setActiveUsers, 300);
+        if (!roomIdParam || !user) return;
         const unsubs = [
-            listenToRoomMessages(roomId as string, setMessages),
-            listenToRoomPresenceUsers(roomId as string, debouncedSetActiveUsers),
             listenIncomingRequests(user.uid, setIncomingRequests),
             listenSentRequests(user.uid, setSentRequests),
             listenMyPrivateRooms(user.uid, setPrivateRooms),
@@ -227,19 +218,22 @@ export default function RoomPage() {
                 }
             }),
         ];
-        joinRoomPresence(roomId as string, user.uid);
-        const hb = setInterval(() => heartbeatPresence(roomId as string, user.uid), 5000);
+        const username = user.displayName || user.email || `User ${user.uid.slice(-4)}`;
+        joinRoomPresence({ roomId: roomIdParam, userId: user.uid, username });
+        const hb = setInterval(() => {
+            heartbeatPresence({ roomId: roomIdParam, userId: user.uid, username });
+        }, 5000);
         return () => {
             unsubs.forEach((unsub) => unsub());
-            leaveRoomPresence(roomId as string, user.uid);
+            leaveRoomPresence({ roomId: roomIdParam, userId: user.uid });
             clearInterval(hb);
         };
-    }, [roomId, user, userNames]);
+    }, [roomIdParam, user, joinRoomPresence, heartbeatPresence, leaveRoomPresence]);
 
     // Send welcome message only once per user per room, and only to the joining user (not to all group)
     useEffect(() => {
-        if (!user || !roomId || !roomData || welcomeSentRef.current) return;
-        const welcomeKey = `drift_welcome_sent_${roomId}_${user.uid}`;
+        if (!user || !roomIdParam || !roomData || welcomeSentRef.current) return;
+        const welcomeKey = `drift_welcome_sent_${roomIdParam}_${user.uid}`;
         if (typeof window !== 'undefined' && sessionStorage.getItem(welcomeKey)) {
             welcomeSentRef.current = true;
             return;
@@ -252,7 +246,7 @@ export default function RoomPage() {
             sessionStorage.setItem(welcomeKey, '1');
         }
         welcomeSentRef.current = true;
-    }, [user, roomId, roomData]);
+    }, [user, roomIdParam, roomData]);
 
     useEffect(() => {
         const unsubs = privateRooms.map((room) =>
@@ -267,42 +261,59 @@ export default function RoomPage() {
     // Automatic cleanup of expired messages every 30 minutes
     useEffect(() => {
         const cleanupInterval = setInterval(() => {
-            cleanupExpiredMessages();
+            cleanupExpiredMessages({});
         }, 30 * 60 * 1000); // 30 minutes
 
         // Run cleanup immediately when component mounts
-        cleanupExpiredMessages();
+        cleanupExpiredMessages({});
 
         return () => clearInterval(cleanupInterval);
-    }, []);
+    }, [cleanupExpiredMessages]);
 
     useEffect(() => {
+        if (!isAtBottom) return;
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages, privateMessages, currentChat]);
+    }, [displayedMessages, currentChat, isAtBottom]);
 
-    // Real-time display names for all active users
     useEffect(() => {
-        if (!activeUsers.length) return;
-        const unsubscribes: Array<() => void> = [];
-        let isMounted = true;
-        activeUsers.forEach((u) => {
-            if (!u.userId) return;
-            const unsub = onSnapshot(
-                doc(db, "users", u.userId),
-                (snap) => {
-                    const data = snap.data();
-                    const name = data?.customDisplayName || data?.displayName || data?.email || `User ${u.userId?.slice(-4)}`;
-                    if (isMounted) setUserNames((prev) => ({ ...prev, [u.userId]: name }));
-                    // Avatar update (optional, can be added similarly)
-                }
-            );
-            unsubscribes.push(unsub);
+        setIsAtBottom(true);
+        bottomRef.current?.scrollIntoView({ behavior: "auto" });
+    }, [currentChat]);
+
+    // Keep display names in sync from Convex users + presence usernames
+    useEffect(() => {
+        const next: { [uid: string]: string } = {};
+
+        (usersByIds || []).forEach((u: any) => {
+            if (!u?.userId) return;
+            const name = u.customDisplayName || u.displayName || u.email;
+            if (name) next[u.userId] = name;
         });
-        return () => {
-            isMounted = false;
-            unsubscribes.forEach((unsub) => unsub());
-        };
-    }, [activeUsers]);
+
+        activeUsers.forEach((u: any) => {
+            if (!u.userId) return;
+            if (!next[u.userId] && u.username) next[u.userId] = u.username;
+        });
+
+        if (user?.uid && !next[user.uid]) {
+            next[user.uid] = user.displayName || user.email || `User ${user.uid.slice(-4)}`;
+        }
+
+        if (Object.keys(next).length === 0) return;
+
+        setUserNames((prev) => {
+            let changed = false;
+            const merged = { ...prev };
+            Object.entries(next).forEach(([uid, name]) => {
+                if (merged[uid] !== name) {
+                    merged[uid] = name;
+                    changed = true;
+                }
+            });
+            return changed ? merged : prev;
+        });
+    }, [usersByIds, activeUsers, user]);
+
 
     // Load connection statuses for all active users
     useEffect(() => {
@@ -363,7 +374,7 @@ export default function RoomPage() {
     };
 
     const handleSend = async () => {
-        if (!user || !input.trim()) return;
+        if (!user || !input.trim() || !roomIdParam) return;
         const msgText = input;
         const replyData = replyingTo;
         setInput("");
@@ -371,7 +382,17 @@ export default function RoomPage() {
 
         try {
             if (currentChat === "group") {
-                await sendMessageToRoom(roomId as string, msgText, user.uid, "text", "never", replyData);
+                const userName =
+                    userNames[user.uid] || user.displayName || user.email || `User ${user.uid.slice(-4)}`;
+                await sendMessageToRoom({
+                    roomId: roomIdParam,
+                    text: msgText,
+                    userId: user.uid,
+                    userName,
+                    type: "text",
+                    deleteMode: "2h",
+                    replyTo: replyData,
+                });
             } else {
                 await sendPrivateMessage(currentChat, msgText, user.uid, "text", "never", replyData);
             }
@@ -470,14 +491,18 @@ export default function RoomPage() {
             const audioURL = data.secure_url;
 
             if (currentChat === "group") {
-                await sendMessageToRoom(
-                    roomId as string,
-                    audioURL,
-                    user.uid,
-                    "voice",
-                    "never",
-                    replyData
-                );
+                const userName =
+                    userNames[user.uid] || user.displayName || user.email || `User ${user.uid.slice(-4)}`;
+                if (!roomIdParam) throw new Error("Missing roomId");
+                await sendMessageToRoom({
+                    roomId: roomIdParam,
+                    text: audioURL,
+                    userId: user.uid,
+                    userName,
+                    type: "voice",
+                    deleteMode: "2h",
+                    replyTo: replyData,
+                });
             } else {
                 await sendPrivateMessage(
                     currentChat,
@@ -498,15 +523,14 @@ export default function RoomPage() {
         if (!user) return;
 
         try {
-            const messageRef = doc(db, "messages", messageId);
-            await deleteDoc(messageRef);
+            await deleteMessageMutation({ messageId });
         } catch (error) {
             console.error("Error deleting message:", error);
         }
     };
 
     const handleDeleteRoom = async () => {
-        if (!user || !roomData) return;
+        if (!user || !roomData || !roomIdParam) return;
 
         const decodedTopic = roomData?.topic ? decodeURIComponent(roomData.topic) : "General Chat";
         const confirmDelete = window.confirm(
@@ -516,7 +540,7 @@ export default function RoomPage() {
         if (!confirmDelete) return;
 
         try {
-            await deleteRoom(roomId as string, user.uid);
+            await deleteRoomMutation({ roomId: roomIdParam, userId: user.uid });
             router.push("/");
         } catch (error) {
             alert("Failed to delete room: " + (error as Error).message);
@@ -525,7 +549,10 @@ export default function RoomPage() {
 
     const handleSaveDisplayName = async () => {
         if (!user || !tempDisplayName.trim()) return;
-        const success = await updateUserData(user.uid, { customDisplayName: tempDisplayName.trim() });
+        const success = await upsertUser({
+            userId: user.uid,
+            customDisplayName: tempDisplayName.trim(),
+        });
         if (success) {
             setUserNames((prev) => ({ ...prev, [user.uid]: tempDisplayName.trim() }));
             setIsEditingName(false);
@@ -540,7 +567,7 @@ export default function RoomPage() {
     const handleAddReaction = async (messageId: string, emoji: string) => {
         if (!user) return;
         try {
-            await addReactionToMessage(messageId, emoji, user.uid);
+            await addReactionToMessage({ messageId, emoji, userId: user.uid });
         } catch (error) {
             console.error("Error adding reaction:", error);
         }
@@ -549,14 +576,14 @@ export default function RoomPage() {
     const handleRemoveReaction = async (messageId: string, emoji: string) => {
         if (!user) return;
         try {
-            await removeReactionFromMessage(messageId, emoji, user.uid);
+            await removeReactionFromMessage({ messageId, emoji, userId: user.uid });
         } catch (error) {
             console.error("Error removing reaction:", error);
         }
     };
 
     const handleTypingStart = () => {
-        if (!user || !roomId || isTyping) return;
+        if (!user || !roomIdParam || isTyping) return;
         setIsTyping(true);
     };
 
@@ -578,7 +605,8 @@ export default function RoomPage() {
         if (!user) return;
 
         try {
-            await updateUserData(user.uid, {
+            await upsertUser({
+                userId: user.uid,
                 customDisplayName: settingsTempDisplayName.trim() || undefined,
                 customAvatar: selectedAvatar || undefined,
             });
@@ -602,8 +630,8 @@ export default function RoomPage() {
     if (roomLoading)
         return (
             <div className="h-screen bg-[#050505] flex flex-col items-center justify-center space-y-4">
-                <div className="w-12 h-12 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                <div className="text-blue-500 font-mono text-[10px] uppercase tracking-[0.5em] animate-pulse">
+                <div className="w-12 h-12 border-2 border-orange-600 border-t-transparent rounded-full animate-spin" />
+                <div className="text-orange-500 font-mono text-[10px] uppercase tracking-[0.5em] animate-pulse">
                     Establishing Secure Uplink...
                 </div>
             </div>
@@ -632,24 +660,24 @@ export default function RoomPage() {
         <>
             {/* OUTER: height fix + scroll allowed on small screens */}
             <div
-                className={`min-h-screen h-[100dvh] w-full ${theme === "dark" ? "bg-[#050505] text-zinc-300" : "bg-gray-100 text-gray-800"
+                className={`min-h-screen h-[100dvh] w-full ${theme === "dark" ? "bg-[#050505] text-stone-700" : "bg-gray-100 text-gray-800"
                     } overflow-hidden`}
             >
                 <div
-                    className={`flex h-full w-full mx-auto ${theme === "dark" ? "bg-[#050505]" : "bg-gray-100"
+                    className={`flex h-full w-full mx-auto min-h-0 ${theme === "dark" ? "bg-[#050505]" : "bg-gray-100"
                         } overflow-hidden`}
                 >
                     {/* SIDEBAR */}
                     <aside
-                        className={`hidden sm:flex flex-shrink-0 w-72 xl:w-80 ${theme === "dark" ? "bg-black/40 border-zinc-800/50" : "bg-white/80 border-gray-300/50"
+                        className={`hidden sm:flex flex-shrink-0 w-72 xl:w-80 ${theme === "dark" ? "bg-black/40 border-stone-200/50" : "bg-white/80 border-gray-300/50"
                             } flex-col z-30 backdrop-blur-2xl border-r`}
                     >
-                        <div className="p-5 xl:p-8 border-b border-zinc-800/50 relative overflow-hidden group">
-                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-600 to-transparent opacity-50" />
+                        <div className="p-5 xl:p-8 border-b border-stone-200/50 relative overflow-hidden group">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-orange-600 to-transparent opacity-50" />
                             <div className="flex items-center justify-between mb-4 xl:mb-6">
                                 <button
                                     onClick={() => router.push("/")}
-                                    className="flex items-center text-[9px] text-zinc-600 hover:text-white transition-all uppercase font-black tracking-[0.2em]"
+                                    className="flex items-center text-[9px] text-stone-500 hover:text-white transition-all uppercase font-black tracking-[0.2em]"
                                 >
                                     <ChevronLeft size={14} className="mr-1" /> Exit Protocol
                                 </button>
@@ -663,8 +691,8 @@ export default function RoomPage() {
                                     </button>
                                 )}
                             </div>
-                            <h1 className="text-lg xl:text-2xl font-black text-white truncate tracking-tighter flex items-center gap-2">
-                                <Hash className="text-blue-600" size={20} />
+                            <h1 className={`text-lg xl:text-2xl font-black truncate tracking-tighter flex items-center gap-2 ${theme === "dark" ? "text-white" : "text-stone-900"}`}>
+                                <Hash className="text-orange-600" size={20} />
                                 <span className="truncate">{decodedTopic.toUpperCase()}</span>
                                 {roomData?.isLocked && <Lock size={16} className="text-yellow-500" />}
                             </h1>
@@ -672,9 +700,9 @@ export default function RoomPage() {
                             <NodesOnline count={activeCount} />
 
                             {/* Display Name Editor */}
-                            <div className="mt-5 xl:mt-6 p-4 bg-zinc-900/30 border border-zinc-800/50 rounded-2xl">
+                            <div className="mt-5 xl:mt-6 p-4 bg-stone-100/30 border border-stone-200/50 rounded-2xl">
                                 <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-[11px] font-black text-zinc-400 uppercase tracking-wider">
+                                    <h3 className="text-[11px] font-black text-stone-500 uppercase tracking-wider">
                                         Your Identity
                                     </h3>
                                     {!isEditingName && (
@@ -685,7 +713,7 @@ export default function RoomPage() {
                                                 );
                                                 setIsEditingName(true);
                                             }}
-                                            className="text-[9px] text-blue-500 hover:text-blue-400 font-bold uppercase"
+                                            className="text-[9px] text-orange-500 hover:text-orange-400 font-bold uppercase"
                                         >
                                             Edit
                                         </button>
@@ -696,7 +724,7 @@ export default function RoomPage() {
                                         <input
                                             value={tempDisplayName}
                                             onChange={(e) => setTempDisplayName(e.target.value)}
-                                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none"
+                                            className="w-full px-3 py-2 bg-stone-200 border border-stone-200 rounded-lg text-white text-sm focus:border-orange-500 focus:outline-none"
                                             placeholder="Enter your display name..."
                                             onKeyDown={(e) => {
                                                 if (e.key === "Enter") handleSaveDisplayName();
@@ -707,20 +735,20 @@ export default function RoomPage() {
                                         <div className="flex gap-2">
                                             <button
                                                 onClick={handleSaveDisplayName}
-                                                className="flex-1 bg-blue-600 text-white text-xs py-2 rounded-lg font-bold hover:bg-blue-500 transition-colors"
+                                                className="flex-1 bg-orange-600 text-white text-xs py-2 rounded-lg font-bold hover:bg-orange-500 transition-colors"
                                             >
                                                 Save
                                             </button>
                                             <button
                                                 onClick={() => setIsEditingName(false)}
-                                                className="flex-1 bg-zinc-700 text-zinc-300 text-xs py-2 rounded-lg font-bold hover:bg-zinc-600 transition-colors"
+                                                className="flex-1 bg-stone-200 text-stone-700 text-xs py-2 rounded-lg font-bold hover:bg-stone-300 transition-colors"
                                             >
                                                 Cancel
                                             </button>
                                         </div>
                                     </div>
                                 ) : (
-                                    <p className="text-sm text-white font-medium truncate">
+                                    <p className={`text-sm font-medium truncate ${theme === "dark" ? "text-white" : "text-stone-900"}`}>
                                         {userNames[user.uid] || user.displayName || "Unknown"}
                                     </p>
                                 )}
@@ -731,14 +759,14 @@ export default function RoomPage() {
 
                             {/* Private Conversations */}
                             <section>
-                                <h3 className="text-[10px] text-zinc-700 font-black uppercase tracking-[0.3em] mb-4 px-3 flex items-center gap-2">
-                                    <ShieldCheck size={14} className="text-zinc-500" /> Secure Sessions
+                                <h3 className="text-[10px] text-stone-600 font-black uppercase tracking-[0.3em] mb-4 px-3 flex items-center gap-2">
+                                    <ShieldCheck size={14} className="text-stone-500" /> Secure Sessions
                                 </h3>
                                 <div
                                     onClick={() => setCurrentChat("group")}
                                     className={`group flex items-center justify-between p-3 xl:p-4 rounded-2xl cursor-pointer transition-all mb-2 border ${currentChat === "group"
                                         ? "bg-white text-black border-white shadow-[0_10px_30px_rgba(255,255,255,0.05)]"
-                                        : "hover:bg-zinc-900/50 border-transparent text-zinc-500 hover:text-zinc-200"
+                                        : "hover:bg-stone-100/50 border-transparent text-stone-500 hover:text-zinc-200"
                                         }`}
                                 >
                                     <div className="flex items-center gap-3">
@@ -747,7 +775,7 @@ export default function RoomPage() {
                                             className={
                                                 currentChat === "group"
                                                     ? "text-black"
-                                                    : "text-zinc-700 group-hover:text-blue-500"
+                                                    : "text-stone-600 group-hover:text-orange-500"
                                             }
                                         />
                                         <span className="text-xs font-black uppercase">Public Stream</span>
@@ -767,14 +795,14 @@ export default function RoomPage() {
                                             key={room.id}
                                             onClick={() => setCurrentChat(room.id)}
                                             className={`flex items-center gap-3 p-3 xl:p-4 rounded-2xl cursor-pointer transition-all mb-2 border ${currentChat === room.id
-                                                ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20"
-                                                : "hover:bg-zinc-900/50 border-transparent text-zinc-500 hover:text-zinc-200"
+                                                ? "bg-orange-600 border-orange-500 text-white shadow-lg shadow-orange-600/20"
+                                                : "hover:bg-stone-100/50 border-transparent text-stone-500 hover:text-zinc-200"
                                                 }`}
                                         >
                                             <div
                                                 className={`w-2 h-2 rounded-full ${currentChat === room.id
                                                     ? "bg-white animate-pulse"
-                                                    : "bg-blue-600/40"
+                                                    : "bg-orange-600/40"
                                                     }`}
                                             />
                                             <span className="text-xs font-black uppercase tracking-tight truncate">
@@ -787,8 +815,8 @@ export default function RoomPage() {
 
                             {/* Peer Discovery */}
                             <section>
-                                <h3 className="text-[10px] text-zinc-700 font-black uppercase tracking-[0.3em] mb-4 px-3 flex items-center gap-2">
-                                    <Zap size={14} className="text-zinc-500" /> Proximity
+                                <h3 className="text-[10px] text-stone-600 font-black uppercase tracking-[0.3em] mb-4 px-3 flex items-center gap-2">
+                                    <Zap size={14} className="text-stone-500" /> Proximity
                                 </h3>
                                 {activeUsers.map((u) => {
                                     const alreadyConnected = privateRooms.find(
@@ -800,29 +828,29 @@ export default function RoomPage() {
                                     return (
                                         <div
                                             key={u.id}
-                                            className="flex justify-between items-center p-3 group hover:bg-zinc-900/30 rounded-2xl transition-all border border-transparent hover:border-zinc-800/50 mb-1"
+                                            className="flex justify-between items-center p-3 group hover:bg-stone-100/30 rounded-2xl transition-all border border-transparent hover:border-stone-200/50 mb-1"
                                         >
                                             <div className="flex flex-col">
                                                 <span
-                                                    className={`text-xs font-black tracking-tight ${u.userId === user.uid ? "text-blue-500" : "text-zinc-400"
+                                                    className={`text-xs font-black tracking-tight ${u.userId === user.uid ? "text-orange-500" : "text-stone-500"
                                                         }`}
                                                 >
                                                     {u.userId === user.uid
                                                         ? "YOU (HOST)"
                                                         : userNames[u.userId] || "Unknown"}
                                                 </span>
-                                                <span className="text-[8px] text-zinc-600 font-bold uppercase">
+                                                <span className="text-[8px] text-stone-500 font-bold uppercase">
                                                     Active Now
                                                 </span>
                                             </div>
                                             {u.userId !== user.uid && (
                                                 <>
                                                     {alreadyConnected ? (
-                                                        <div className="bg-blue-600/10 p-2 rounded-lg text-blue-500">
+                                                        <div className="bg-orange-600/10 p-2 rounded-lg text-orange-500">
                                                             <UserCheck size={14} />
                                                         </div>
                                                     ) : connectionStatus === "pending" ? (
-                                                        <span className="text-[9px] text-zinc-600 border border-zinc-800 px-3 py-1 rounded-full uppercase font-black">
+                                                        <span className="text-[9px] text-stone-500 border border-stone-200 px-3 py-1 rounded-full uppercase font-black">
                                                             Waiting
                                                         </span>
                                                     ) : connectionStatus === "accepted" ? (
@@ -848,7 +876,7 @@ export default function RoomPage() {
                         </div>
 
                         {/* Settings Section */}
-                        <div className="px-3 xl:px-4 py-4 xl:py-6 border-t border-zinc-800/50">
+                        <div className="px-3 xl:px-4 py-4 xl:py-6 border-t border-stone-200/50">
                             <button
                                 onClick={() => {
                                     setSettingsTempDisplayName(
@@ -859,9 +887,9 @@ export default function RoomPage() {
                                     );
                                     setShowSettingsModal(true);
                                 }}
-                                className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                                className="w-full flex items-center gap-3 p-3 hover:bg-stone-100/50 rounded-xl transition-all text-left"
                             >
-                                <Settings size={16} className="text-zinc-400" />
+                                <Settings size={16} className="text-stone-500" />
                                 <span className="text-sm font-medium">Settings</span>
                             </button>
                         </div>
@@ -869,26 +897,26 @@ export default function RoomPage() {
 
                     {/* MAIN CHAT */}
                     <main
-                        className={`flex-1 flex flex-col relative ${theme === "dark" ? "bg-[#050505]" : "bg-gray-50"
+                        className={`flex-1 flex flex-col relative min-h-0 ${theme === "dark" ? "bg-[#050505]" : "bg-gray-50"
                             }`}
                     >
-                        <header className="h-16 sm:h-20 border-b border-zinc-900 flex items-center px-3 sm:px-6 lg:px-10 justify-between bg-black/20 backdrop-blur-md z-20">
+                        <header className="h-16 sm:h-20 border-b border-stone-200 flex items-center px-3 sm:px-6 lg:px-10 justify-between bg-black/20 backdrop-blur-md z-20">
                             <div className="flex items-center gap-3 sm:gap-4">
                                 {/* Mobile Hamburger Menu */}
                                 <button
                                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                                    className="sm:hidden p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                                    className="sm:hidden p-2 hover:bg-stone-100/50 rounded-lg transition-all"
                                 >
                                     {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
                                 </button>
 
                                 <div className="flex flex-col">
-                                    <h2 className="text-[9px] sm:text-[11px] font-black tracking-[0.32em] sm:tracking-[0.4em] uppercase text-zinc-500">
+                                    <h2 className="text-[9px] sm:text-[11px] font-black tracking-[0.32em] sm:tracking-[0.4em] uppercase text-stone-500">
                                         {currentChat === "group"
                                             ? "Signal: Global_Broadcast"
                                             : "Signal: Peer_To_Peer_Encrypted"}
                                     </h2>
-                                    <p className="text-[8px] sm:text-[9px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">
+                                    <p className="text-[8px] sm:text-[9px] text-orange-600 font-bold uppercase tracking-widest mt-0.5">
                                         Latency: 2ms • Security: {encryptionEnabled ? "E2E Encrypted" : "High"}
                                     </p>
                                 </div>
@@ -897,39 +925,39 @@ export default function RoomPage() {
                                 {[1, 2, 3].map((i) => (
                                     <div
                                         key={i}
-                                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-[#050505] bg-zinc-800"
+                                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-[#050505] bg-stone-200"
                                     />
                                 ))}
                                 <button
                                     onClick={() => setShowSearch(!showSearch)}
-                                    className="ml-1 sm:ml-2 w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-zinc-700/50 bg-zinc-800/50 hover:bg-zinc-700/50 flex items-center justify-center transition-all"
+                                    className="ml-1 sm:ml-2 w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-stone-200/50 bg-stone-200/50 hover:bg-stone-200/50 flex items-center justify-center transition-all"
                                     title="Search messages"
                                 >
-                                    <Search size={14} className="text-zinc-400" />
+                                    <Search size={14} className="text-stone-900" />
                                 </button>
                                 <button
                                     onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                                    className="ml-1 sm:ml-2 w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-zinc-700/50 bg-zinc-800/50 hover:bg-zinc-700/50 flex items-center justify-center transition-all"
+                                    className="ml-1 sm:ml-2 w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-stone-200/50 bg-stone-200/50 hover:bg-stone-200/50 flex items-center justify-center transition-all"
                                     title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
                                 >
                                     {theme === "dark" ? (
-                                        <Sun size={14} className="text-zinc-400" />
+                                        <Sun size={14} className="text-stone-900" />
                                     ) : (
-                                        <Moon size={14} className="text-zinc-400" />
+                                        <Moon size={14} className="text-stone-500" />
                                     )}
                                 </button>
                                 <button
                                     onClick={() => setEncryptionEnabled(!encryptionEnabled)}
                                     className={`ml-1 sm:ml-2 w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center transition-all ${encryptionEnabled
                                         ? "border-green-500/50 bg-green-900/20"
-                                        : "border-zinc-700/50 bg-zinc-800/50 hover:bg-zinc-700/50"
+                                        : "border-stone-200/50 bg-stone-200/50 hover:bg-stone-200/50"
                                         }`}
                                     title={`${encryptionEnabled ? "Disable" : "Enable"
                                         } end-to-end encryption`}
                                 >
                                     <Shield
                                         size={14}
-                                        className={encryptionEnabled ? "text-green-400" : "text-zinc-400"}
+                                        className={encryptionEnabled ? "text-green-400" : "text-stone-900"}
                                     />
                                 </button>
                             </div>
@@ -937,18 +965,18 @@ export default function RoomPage() {
 
                         {/* Search Bar */}
                         {showSearch && (
-                            <div className="px-3 sm:px-6 lg:px-10 py-3 sm:py-4 bg-zinc-900/50 border-b border-zinc-800/50">
+                            <div className="px-3 sm:px-6 lg:px-10 py-3 sm:py-4 bg-stone-100/50 border-b border-stone-200/50">
                                 <div className="max-w-4xl mx-auto relative">
                                     <Search
                                         size={16}
-                                        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
+                                        className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500"
                                     />
                                     <input
                                         type="text"
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                         placeholder="Search messages..."
-                                        className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg pl-10 pr-24 py-2 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500/50"
+                                        className="w-full bg-stone-200/50 border border-stone-200/50 rounded-lg pl-10 pr-24 py-2 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500/50"
                                     />
                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
                                         {searchTerm && (
@@ -965,7 +993,7 @@ export default function RoomPage() {
                                                 setSearchTerm("");
                                                 setShowSearch(false);
                                             }}
-                                            className="px-2 py-1 text-[10px] sm:text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 hover:text-white rounded font-medium transition-colors"
+                                            className="px-2 py-1 text-[10px] sm:text-xs bg-stone-200 hover:bg-stone-300 text-stone-700 hover:text-white rounded font-medium transition-colors"
                                             title="Close search"
                                         >
                                             Close
@@ -973,11 +1001,11 @@ export default function RoomPage() {
                                     </div>
                                 </div>
                                 {searchTerm && (
-                                    <div className="max-w-4xl mx-auto mt-1 sm:mt-2 text-[10px] sm:text-xs text-zinc-500">
+                                    <div className="max-w-4xl mx-auto mt-1 sm:mt-2 text-[10px] sm:text-xs text-stone-500">
                                         Showing messages containing "{searchTerm}" •
                                         <button
                                             onClick={() => setSearchTerm("")}
-                                            className="text-blue-400 hover:text-blue-300 underline ml-1"
+                                            className="text-orange-400 hover:text-orange-300 underline ml-1"
                                         >
                                             Show all messages
                                         </button>
@@ -992,10 +1020,10 @@ export default function RoomPage() {
                                 {incomingRequests.map((req) => (
                                     <div
                                         key={req.id}
-                                        className="bg-zinc-900/90 border border-blue-600/30 p-4 sm:p-5 rounded-3xl shadow-2xl backdrop-blur-xl flex flex-col gap-4 animate-in slide-in-from-top-10 duration-500"
+                                        className="bg-stone-100/90 border border-orange-600/30 p-4 sm:p-5 rounded-3xl shadow-2xl backdrop-blur-xl flex flex-col gap-4 animate-in slide-in-from-top-10 duration-500"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-blue-600 rounded-xl">
+                                            <div className="p-2 bg-orange-600 rounded-xl">
                                                 <Zap size={16} className="text-white" />
                                             </div>
                                             <p className="text-[10px] sm:text-[11px] font-black uppercase text-white leading-none">
@@ -1005,13 +1033,13 @@ export default function RoomPage() {
                                         <div className="flex gap-2">
                                             <button
                                                 onClick={() => acceptRequest(req.id)}
-                                                className="flex-1 bg-white text-black text-[10px] py-2.5 rounded-xl font-black uppercase hover:bg-blue-600 hover:text-white transition-all"
+                                                className="flex-1 bg-white text-black text-[10px] py-2.5 rounded-xl font-black uppercase hover:bg-orange-600 hover:text-white transition-all"
                                             >
                                                 Accept
                                             </button>
                                             <button
                                                 onClick={() => rejectRequest(req.id)}
-                                                className="flex-1 bg-zinc-800 text-zinc-400 text-[10px] py-2.5 rounded-xl font-black uppercase hover:bg-zinc-700 transition-all"
+                                                className="flex-1 bg-stone-200 text-stone-500 text-[10px] py-2.5 rounded-xl font-black uppercase hover:bg-stone-200 transition-all"
                                             >
                                                 Ignore
                                             </button>
@@ -1030,7 +1058,7 @@ export default function RoomPage() {
                                     <h2 className="text-2xl font-black text-white mb-2 animate-pulse">
                                         Connection Established!
                                     </h2>
-                                    <p className="text-lg text-blue-400 font-medium">
+                                    <p className="text-lg text-orange-400 font-medium">
                                         You are now connected with {newConnectionUser}
                                     </p>
                                     {/* Floating Emojis */}
@@ -1055,11 +1083,16 @@ export default function RoomPage() {
                         )}
 
                         {/* Messages Stream */}
-                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10 space-y-6 sm:space-y-8 lg:space-y-10 custom-scrollbar">
-                            {(currentChat === "group"
-                                ? messages
-                                : privateMessages[currentChat] || []
-                            )
+                        <div
+                            ref={messagesContainerRef}
+                            onScroll={(e) => {
+                                const el = e.currentTarget;
+                                const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+                                setIsAtBottom(nearBottom);
+                            }}
+                            className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 lg:p-10 space-y-6 sm:space-y-8 lg:space-y-10 custom-scrollbar"
+                        >
+                            {displayedMessages
                                 .filter(
                                     (msg) =>
                                         !searchTerm ||
@@ -1068,13 +1101,16 @@ export default function RoomPage() {
                                 .map((msg, i) => {
                                     const isMe = msg.userId === user.uid;
                                     const isSystem = msg.userId === "system";
-                                    const senderName = userNames[msg.userId] || "Unknown";
+                                    const senderName =
+                                        userNames[msg.userId] ||
+                                        msg.userName ||
+                                        "Unknown";
                                     
                                     if (isSystem) {
                                         return (
                                             <div key={msg.id || i} className="flex justify-center animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                                <div className="max-w-[80%] bg-zinc-800/50 border border-zinc-700/50 rounded-2xl p-4 text-center">
-                                                    <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+                                                <div className="max-w-[80%] bg-stone-200/50 border border-stone-200/50 rounded-2xl p-4 text-center">
+                                                    <div className="text-sm text-stone-700 leading-relaxed whitespace-pre-line">
                                                         {msg.text}
                                                     </div>
                                                 </div>
@@ -1094,15 +1130,15 @@ export default function RoomPage() {
                                                             <img
                                                                 src={userAvatars[msg.userId]}
                                                                 alt="Avatar"
-                                                                className="w-6 h-6 rounded-full border border-zinc-600 object-cover"
+                                                                className="w-6 h-6 rounded-full border border-stone-300 object-cover"
                                                             />
                                                         ) : (
-                                                            <div className="w-6 h-6 rounded-full border border-zinc-600 bg-blue-600 flex items-center justify-center text-xs">
+                                                            <div className="w-6 h-6 rounded-full border border-stone-300 bg-orange-600 flex items-center justify-center text-xs">
                                                                 {userAvatars[msg.userId] || "👤"}
                                                             </div>
                                                         )}
 
-                                                        <span className="text-[9px] font-black text-zinc-600 uppercase tracking-tighter truncate max-w-[120px] sm:max-w-[200px]">
+                                                        <span className={`text-[9px] font-black uppercase tracking-tighter truncate max-w-[120px] sm:max-w-[200px] ${theme === "dark" ? "text-stone-500" : "text-stone-900"}`}>
                                                             {senderName}
                                                         </span>
                                                         <button
@@ -1113,7 +1149,7 @@ export default function RoomPage() {
                                                                 connectionStatuses[msg.userId] === "pending" ||
                                                                 connectionStatuses[msg.userId] === "accepted"
                                                             }
-                                                            className="hidden sm:inline opacity-0 group-hover:opacity-100 px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 rounded text-[8px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            className="hidden sm:inline opacity-0 group-hover:opacity-100 px-2 py-1 bg-orange-600/20 hover:bg-orange-600/40 border border-orange-500/30 rounded text-[8px] font-bold text-orange-400 hover:text-orange-300 uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             {connectionStatuses[msg.userId] === "accepted"
                                                                 ? "Connected"
@@ -1127,24 +1163,24 @@ export default function RoomPage() {
                                                 {msg.replyTo && (
                                                     <div
                                                         className={`mb-2 px-3 py-2 rounded-lg border-l-2 ${theme === "dark"
-                                                            ? "bg-zinc-800/50 border-zinc-600"
+                                                            ? "bg-stone-200/50 border-stone-300"
                                                             : "bg-gray-200/50 border-gray-400"
                                                             } ml-2`}
                                                     >
-                                                        <div className="text-[10px] sm:text-xs text-zinc-500 mb-1">
+                                                        <div className="text-[10px] sm:text-xs text-stone-500 mb-1">
                                                             Replying to{" "}
                                                             {userNames[msg.replyTo.userId] ||
                                                                 `User ${msg.replyTo.userId?.slice(-4)}`}
                                                         </div>
-                                                        <div className="text-xs sm:text-sm text-zinc-400 truncate">
+                                                        <div className="text-xs sm:text-sm text-stone-500 truncate">
                                                             {msg.replyTo.text}
                                                         </div>
                                                     </div>
                                                 )}
                                                 <div
                                                     className={`px-4 sm:px-5 lg:px-6 py-3 sm:py-4 rounded-3xl text-[13px] sm:text-[14px] font-medium leading-relaxed shadow-sm transition-all ${isMe
-                                                        ? "bg-blue-600 text-white rounded-tr-none hover:shadow-[0_10px_40px_rgba(59,130,246,0.15)]"
-                                                        : "bg-zinc-900/50 text-zinc-200 rounded-tl-none border border-zinc-800/50 hover:bg-zinc-900 transition-colors"
+                                                        ? "bg-orange-600 text-white rounded-tr-none hover:shadow-[0_10px_40px_rgba(59,130,246,0.15)]"
+                                                        : `${theme === "dark" ? "bg-stone-100/50 text-zinc-200" : "bg-white text-stone-900"} rounded-tl-none border border-stone-200/50 hover:bg-stone-100 transition-colors`
                                                         }`}
                                                 >
                                                     {msg.type === "voice" ? (
@@ -1160,22 +1196,27 @@ export default function RoomPage() {
                                                     className={`mt-1 sm:mt-2 flex items-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-300 ${isMe ? "justify-end" : "justify-start"
                                                         }`}
                                                 >
-                                                    <span className="text-[8px] sm:text-[9px] font-bold text-zinc-600 uppercase">
-                                                        {msg.createdAt?.toDate
-                                                            ? new Date(
-                                                                msg.createdAt.toDate()
-                                                            ).toLocaleTimeString([], {
+                                                    <span className="text-[8px] sm:text-[9px] font-bold text-stone-500 uppercase">
+                                                        {(() => {
+                                                            const ts = msg.createdAt?.toDate
+                                                                ? msg.createdAt.toDate().getTime()
+                                                                : msg.timestamp;
+                                                            if (!ts) return "Delivered";
+                                                            return new Date(ts).toLocaleTimeString([], {
                                                                 hour: "2-digit",
                                                                 minute: "2-digit",
-                                                            })
-                                                            : "Delivered"}
+                                                            });
+                                                        })()}
                                                     </span>
-                                                    {msg.createdAt?.toDate && (
+                                                    {(() => {
+                                                        const ts = msg.createdAt?.toDate
+                                                            ? msg.createdAt.toDate().getTime()
+                                                            : msg.timestamp;
+                                                        if (!ts) return null;
+                                                        return (
                                                         <span className="text-[8px] text-orange-400/70 font-medium">
                                                             {(() => {
-                                                                const createdTime = msg
-                                                                    .createdAt!.toDate()
-                                                                    .getTime();
+                                                                const createdTime = ts;
                                                                 const expiryTime =
                                                                     createdTime + 2 * 60 * 60 * 1000;
                                                                 const timeLeft = Math.max(
@@ -1191,9 +1232,10 @@ export default function RoomPage() {
                                                                 );
                                                             })()}
                                                         </span>
-                                                    )}
+                                                        );
+                                                    })()}
                                                     {isMe && (
-                                                        <span className="text-[8px] text-zinc-500">
+                                                        <span className="text-[8px] text-stone-500">
                                                             {msg.readBy && msg.readBy.length > 0
                                                                 ? `Read by ${msg.readBy.length}`
                                                                 : "Sent"}
@@ -1201,7 +1243,7 @@ export default function RoomPage() {
                                                     )}
                                                     <button
                                                         onClick={() => setReplyingTo(msg)}
-                                                        className="text-zinc-500 hover:text-blue-400 transition-colors p-1 hover:bg-blue-500/10 rounded"
+                                                        className="text-stone-500 hover:text-orange-400 transition-colors p-1 hover:bg-orange-500/10 rounded"
                                                         title="Reply to message"
                                                     >
                                                         <Reply size={12} />
@@ -1209,7 +1251,7 @@ export default function RoomPage() {
                                                     {isMe && msg.id && (
                                                         <button
                                                             onClick={() => handleDeleteMessage(msg.id)}
-                                                            className="text-zinc-500 hover:text-red-400 transition-colors p-1 hover:bg-red-500/10 rounded"
+                                                            className="text-stone-500 hover:text-red-400 transition-colors p-1 hover:bg-red-500/10 rounded"
                                                             title="Delete message"
                                                         >
                                                             <Trash2 size={12} />
@@ -1219,17 +1261,17 @@ export default function RoomPage() {
 
                                                 {isMe && (
                                                     <div className="flex items-center justify-end gap-1 sm:gap-2 mt-1 sm:mt-2 mr-1">
-                                                        <span className="text-[8px] sm:text-[9px] font-black text-zinc-600 uppercase tracking-tighter">
+                                                        <span className="text-[8px] sm:text-[9px] font-black text-stone-500 uppercase tracking-tighter">
                                                             You
                                                         </span>
                                                         {userAvatars[user.uid]?.startsWith("http") ? (
                                                             <img
                                                                 src={userAvatars[user.uid]}
                                                                 alt="Your Avatar"
-                                                                className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-zinc-600 object-cover"
+                                                                className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-stone-300 object-cover"
                                                             />
                                                         ) : (
-                                                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-zinc-600 bg-blue-600 flex items-center justify-center text-xs">
+                                                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-stone-300 bg-orange-600 flex items-center justify-center text-xs">
                                                                 {userAvatars[user.uid] || "👤"}
                                                             </div>
                                                         )}
@@ -1254,8 +1296,8 @@ export default function RoomPage() {
                                                                         }
                                                                     }}
                                                                     className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] sm:text-xs border transition-all ${users.includes(user?.uid)
-                                                                        ? "bg-blue-600/20 border-blue-500/50 text-blue-300"
-                                                                        : "bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:bg-zinc-700/50"
+                                                                        ? "bg-orange-600/20 border-orange-500/50 text-orange-300"
+                                                                        : "bg-stone-200/50 border-stone-200/50 text-stone-500 hover:bg-stone-200/50"
                                                                         }`}
                                                                     title={`${users.length} reaction${users.length > 1 ? "s" : ""
                                                                         }`}
@@ -1281,7 +1323,7 @@ export default function RoomPage() {
                                                                 handleAddReaction(msg.id, emoji);
                                                             }
                                                         }}
-                                                        className="text-[10px] sm:text-xs text-zinc-500 hover:text-blue-400 transition-colors p-1 hover:bg-blue-500/10 rounded"
+                                                        className="text-[10px] sm:text-xs text-stone-500 hover:text-orange-400 transition-colors p-1 hover:bg-orange-500/10 rounded"
                                                         title="Add reaction"
                                                     >
                                                         + 😀
@@ -1298,18 +1340,18 @@ export default function RoomPage() {
                         <footer className="p-4 sm:p-6 lg:p-10">
                             <div className="max-w-4xl mx-auto relative">
                                 {Object.keys(typingUsers).length > 0 && (
-                                    <div className="mb-2 sm:mb-3 flex items-center gap-2 text-zinc-400 text-[10px] sm:text-xs">
+                                    <div className="mb-2 sm:mb-3 flex items-center gap-2 text-stone-500 text-[10px] sm:text-xs">
                                         <div className="flex gap-1">
                                             <div
-                                                className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                                                className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"
                                                 style={{ animationDelay: "0ms" }}
                                             />
                                             <div
-                                                className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                                                className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"
                                                 style={{ animationDelay: "150ms" }}
                                             />
                                             <div
-                                                className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                                                className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"
                                                 style={{ animationDelay: "300ms" }}
                                             />
                                         </div>
@@ -1321,33 +1363,33 @@ export default function RoomPage() {
                                 )}
 
                                 {replyingTo && (
-                                    <div className="mb-2 sm:mb-3 p-3 bg-blue-600/10 border border-blue-500/30 rounded-xl">
+                                    <div className="mb-2 sm:mb-3 p-3 bg-orange-600/10 border border-orange-500/30 rounded-xl">
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-2">
-                                                <Reply size={14} className="text-blue-400" />
-                                                <span className="text-[10px] sm:text-xs font-bold text-blue-400 uppercase">
+                                                <Reply size={14} className="text-orange-400" />
+                                                <span className="text-[10px] sm:text-xs font-bold text-orange-400 uppercase">
                                                     Replying to
                                                 </span>
-                                                <span className="text-[10px] sm:text-xs text-blue-300">
+                                                <span className="text-[10px] sm:text-xs text-orange-300">
                                                     {userNames[replyingTo.userId] || "Unknown"}
                                                 </span>
                                             </div>
                                             <button
                                                 onClick={() => setReplyingTo(null)}
-                                                className="text-zinc-500 hover:text-zinc-300"
+                                                className="text-stone-500 hover:text-stone-700"
                                             >
                                                 <X size={14} />
                                             </button>
                                         </div>
-                                        <div className="text-xs sm:text-sm text-zinc-300 truncate">
+                                        <div className="text-xs sm:text-sm text-stone-700 truncate">
                                             {replyingTo.text}
                                         </div>
                                     </div>
                                 )}
 
-                                <div className="flex items-center gap-2 sm:gap-3 bg-zinc-900/40 border border-zinc-800/80 p-2 sm:p-3 rounded-2xl sm:rounded-[2rem] focus-within:border-blue-600/50 transition-all backdrop-blur-xl focus-within:shadow-[0_0_50px_rgba(59,130,246,0.05)]">
+                                <div className="flex items-center gap-2 sm:gap-3 bg-stone-100/40 border border-stone-200/80 p-2 sm:p-3 rounded-2xl sm:rounded-[2rem] focus-within:border-orange-600/50 transition-all backdrop-blur-xl focus-within:shadow-[0_0_50px_rgba(59,130,246,0.05)]">
                                     <input
-                                        className="flex-1 bg-transparent px-3 sm:px-5 py-2 sm:py-3 outline-none text-xs sm:text-sm placeholder:text-zinc-700 placeholder:uppercase placeholder:text-[9px] sm:placeholder:text-[10px] placeholder:tracking-[0.25em] sm:placeholder:tracking-[0.3em] font-bold text-white"
+                                        className="flex-1 bg-transparent px-3 sm:px-5 py-2 sm:py-3 outline-none text-xs sm:text-sm placeholder:text-stone-600 placeholder:uppercase placeholder:text-[9px] sm:placeholder:text-[10px] placeholder:tracking-[0.25em] sm:placeholder:tracking-[0.3em] font-bold text-white"
                                         value={input}
                                         onChange={(e) => handleInputChange(e.target.value)}
                                         onKeyDown={(e) => e.key === "Enter" && handleSend()}
@@ -1355,21 +1397,21 @@ export default function RoomPage() {
                                     />
                                     <button
                                         onClick={isRecording ? stopRecording : startRecording}
-                                        className={`text-zinc-400 hover:text-red-400 transition-colors p-1 sm:p-2 ${isRecording ? 'text-red-500 animate-pulse' : ''}`}
+                                        className={`text-stone-500 hover:text-red-400 transition-colors p-1 sm:p-2 ${isRecording ? 'text-red-500 animate-pulse' : ''}`}
                                         title={isRecording ? "Stop recording" : "Start voice recording"}
                                     >
                                         {isRecording ? <MicOff size={18} className="sm:w-5 sm:h-5" /> : <Mic size={18} className="sm:w-5 sm:h-5" />}
                                     </button>
                                     <button
                                         onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                                        className="text-zinc-400 hover:text-zinc-200 transition-colors p-1 sm:p-2"
+                                        className="text-stone-500 hover:text-zinc-200 transition-colors p-1 sm:p-2"
                                     >
                                         <Smile size={18} className="sm:w-5 sm:h-5" />
                                     </button>
                                     <button
                                         onClick={handleSend}
                                         disabled={!input.trim()}
-                                        className="bg-white text-black h-10 w-10 sm:h-12 sm:w-12 flex items-center justify-center rounded-full hover:bg-blue-600 hover:text-white disabled:opacity-5 transition-all group active:scale-90 shadow-2xl"
+                                        className="bg-white text-black h-10 w-10 sm:h-12 sm:w-12 flex items-center justify-center rounded-full hover:bg-orange-600 hover:text-white disabled:opacity-5 transition-all group active:scale-90 shadow-2xl"
                                     >
                                         <Send
                                             size={18}
@@ -1402,14 +1444,14 @@ export default function RoomPage() {
                             <div className="flex flex-col h-full p-5">
                                 <div className="flex items-center justify-between mb-6">
                                     <div className="flex items-center gap-2">
-                                        <Zap className="text-blue-500" fill="currentColor" size={20} />
+                                        <Zap className="text-orange-500" fill="currentColor" size={20} />
                                         <span className="text-lg font-black italic tracking-tighter">
                                             DRIFT.
                                         </span>
                                     </div>
                                     <button
                                         onClick={() => setIsMobileMenuOpen(false)}
-                                        className="p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                                        className="p-2 hover:bg-stone-100/50 rounded-lg transition-all"
                                     >
                                         <X size={20} />
                                     </button>
@@ -1419,15 +1461,15 @@ export default function RoomPage() {
                                 <div className="mb-6">
                                     {user ? (
                                         <div className="space-y-4">
-                                            <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
-                                                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                                            <div className="flex items-center gap-3 p-3 bg-stone-100/30 rounded-xl">
+                                                <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
                                                     <User size={16} />
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-medium text-white">
                                                         {user.displayName || "Anonymous"}
                                                     </p>
-                                                    <p className="text-xs text-zinc-500">Connected</p>
+                                                    <p className="text-xs text-stone-500">Connected</p>
                                                 </div>
                                             </div>
 
@@ -1447,7 +1489,7 @@ export default function RoomPage() {
                                     ) : (
                                         <button
                                             onClick={() => router.push("/")}
-                                            className="w-full flex items-center gap-3 p-4 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all"
+                                            className="w-full flex items-center gap-3 p-4 bg-orange-600 hover:bg-blue-700 rounded-xl transition-all"
                                         >
                                             <Shield size={16} />
                                             <span className="text-sm font-medium">Secure Auth</span>
@@ -1457,7 +1499,7 @@ export default function RoomPage() {
 
                                 {/* NAVIGATION */}
                                 <div className="flex-1 space-y-2 overflow-y-auto">
-                                    <div className="text-xs font-black uppercase tracking-widest text-zinc-600 mb-2">
+                                    <div className="text-xs font-black uppercase tracking-widest text-stone-500 mb-2">
                                         Navigation
                                     </div>
 
@@ -1467,14 +1509,14 @@ export default function RoomPage() {
                                             setCurrentChat("group");
                                         }}
                                         className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${currentChat === "group"
-                                            ? "bg-blue-600/20 border border-blue-500/30"
-                                            : "hover:bg-zinc-900/50"
+                                            ? "bg-orange-600/20 border border-orange-500/30"
+                                            : "hover:bg-stone-100/50"
                                             }`}
                                     >
                                         <Radio
                                             size={16}
                                             className={
-                                                currentChat === "group" ? "text-blue-400" : "text-zinc-400"
+                                                currentChat === "group" ? "text-orange-400" : "text-stone-500"
                                             }
                                         />
                                         <span className="text-sm font-medium">Public Chat</span>
@@ -1482,7 +1524,7 @@ export default function RoomPage() {
 
                                     {privateRooms.length > 0 && (
                                         <div className="space-y-1">
-                                            <div className="text-xs font-black uppercase tracking-widest text-zinc-600 mb-1">
+                                            <div className="text-xs font-black uppercase tracking-widest text-stone-500 mb-1">
                                                 Private Chats
                                             </div>
                                             {privateRooms.map((room) => {
@@ -1501,7 +1543,7 @@ export default function RoomPage() {
                                                         }}
                                                         className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${currentChat === room.id
                                                             ? "bg-purple-600/20 border border-purple-500/30"
-                                                            : "hover:bg-zinc-900/50"
+                                                            : "hover:bg-stone-100/50"
                                                             }`}
                                                     >
                                                         <MessageCircle
@@ -1509,7 +1551,7 @@ export default function RoomPage() {
                                                             className={
                                                                 currentChat === room.id
                                                                     ? "text-purple-400"
-                                                                    : "text-zinc-400"
+                                                                    : "text-stone-500"
                                                             }
                                                         />
                                                         <span className="text-sm font-medium truncate">
@@ -1526,9 +1568,9 @@ export default function RoomPage() {
                                             setIsMobileMenuOpen(false);
                                             router.push("/");
                                         }}
-                                        className="w-full flex items-center gap-3 p-3 hover:bg-zinc-900/50 rounded-xl transition-all text-left"
+                                        className="w-full flex items-center gap-3 p-3 hover:bg-stone-100/50 rounded-xl transition-all text-left"
                                     >
-                                        <House size={16} className="text-zinc-400" />
+                                        <House size={16} className="text-stone-500" />
                                         <span className="text-sm font-medium">Home</span>
                                     </button>
 
@@ -1537,16 +1579,16 @@ export default function RoomPage() {
 
                                 <div className="border-t border-white/10 pt-4 space-y-2">
                                     <div className="text-center space-y-1">
-                                        <div className="text-[7px] font-black uppercase tracking-[0.35em] text-zinc-700">
+                                        <div className="text-[7px] font-black uppercase tracking-[0.35em] text-stone-600">
                                             DEVELOPED BY
                                         </div>
-                                        <div className="text-sm font-bold text-blue-400">
+                                        <div className="text-sm font-bold text-orange-400">
                                             Parth Tiwari
                                         </div>
-                                        <div className="text-[7px] text-zinc-500 font-medium">
+                                        <div className="text-[7px] text-stone-500 font-medium">
                                             GitHub: @parthtiwari2599
                                         </div>
-                                        <div className="text-[7px] text-zinc-500 font-medium">
+                                        <div className="text-[7px] text-stone-500 font-medium">
                                             parthtiwari2599@gmail.com
                                         </div>
                                     </div>
@@ -1570,7 +1612,7 @@ export default function RoomPage() {
                             <h3 className="text-lg font-black text-white">Settings</h3>
                             <button
                                 onClick={() => setShowSettingsModal(false)}
-                                className="p-2 hover:bg-zinc-900/50 rounded-lg transition-all"
+                                className="p-2 hover:bg-stone-100/50 rounded-lg transition-all"
                             >
                                 <X size={20} />
                             </button>
@@ -1578,21 +1620,21 @@ export default function RoomPage() {
 
                         <div className="space-y-6">
                             <div>
-                                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                                <label className="block text-sm font-medium text-stone-500 mb-2">
                                     Display Name
                                 </label>
                                 <input
                                     type="text"
                                     value={settingsTempDisplayName}
                                     onChange={(e) => setSettingsTempDisplayName(e.target.value)}
-                                    className="w-full bg-zinc-900/50 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                                    className="w-full bg-stone-100/50 border border-stone-200 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500"
                                     placeholder="Enter your display name"
                                     maxLength={30}
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-zinc-400 mb-3">
+                                <label className="block text-sm font-medium text-stone-500 mb-3">
                                     Choose Avatar
                                 </label>
                                 <div className="grid grid-cols-4 gap-3">
@@ -1618,30 +1660,30 @@ export default function RoomPage() {
                                             key={emoji}
                                             onClick={() => setSelectedAvatar(emoji)}
                                             className={`aspect-square rounded-xl border-2 text-2xl flex items-center justify-center transition-all ${selectedAvatar === emoji
-                                                ? "border-blue-500 bg-blue-500/20"
-                                                : "border-zinc-700 hover:border-zinc-500"
+                                                ? "border-orange-500 bg-orange-500/20"
+                                                : "border-stone-200 hover:border-stone-300"
                                                 }`}
                                         >
                                             {emoji}
                                         </button>
                                     ))}
                                 </div>
-                                <p className="text-xs text-zinc-500 mt-2">
+                                <p className="text-xs text-stone-500 mt-2">
                                     Selected: {selectedAvatar || "None"}
                                 </p>
                             </div>
 
-                            <div className="border-t border-zinc-800 pt-4">
-                                <p className="text-sm font-medium text-zinc-400 mb-3">Preview</p>
-                                <div className="flex items-center gap-3 p-3 bg-zinc-900/30 rounded-xl">
-                                    <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-lg">
+                            <div className="border-t border-stone-200 pt-4">
+                                <p className="text-sm font-medium text-stone-500 mb-3">Preview</p>
+                                <div className="flex items-center gap-3 p-3 bg-stone-100/30 rounded-xl">
+                                    <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center text-lg">
                                         {selectedAvatar || "👤"}
                                     </div>
                                     <div>
                                         <p className="text-sm font-medium text-white">
                                             {settingsTempDisplayName || "Anonymous"}
                                         </p>
-                                        <p className="text-xs text-zinc-500">Your new profile</p>
+                                        <p className="text-xs text-stone-500">Your new profile</p>
                                     </div>
                                 </div>
                             </div>
@@ -1649,13 +1691,13 @@ export default function RoomPage() {
                             <div className="flex gap-3 pt-4">
                                 <button
                                     onClick={() => setShowSettingsModal(false)}
-                                    className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all font-medium"
+                                    className="flex-1 px-4 py-3 bg-stone-200 hover:bg-stone-200 text-white rounded-xl transition-all font-medium"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={handleSaveSettings}
-                                    className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium"
+                                    className="flex-1 px-4 py-3 bg-orange-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium"
                                 >
                                     Save
                                 </button>
@@ -1667,3 +1709,4 @@ export default function RoomPage() {
         </>
     );
 }
+
