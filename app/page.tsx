@@ -195,7 +195,7 @@ export default function Home() {
     if (!user) throw new Error("User not logged in");
     await createOrJoinRoom({
       topic: room.topic,
-      passwordHash: room.passwordHash,
+      passwordHash: room.passwordHash ?? undefined,
       userId: user.uid,
     });
     router.push(`/room/${room.id}`);
