@@ -9,6 +9,7 @@
  */
 
 import type * as messages from "../messages.js";
+import type * as passwordActions from "../passwordActions.js";
 import type * as presence from "../presence.js";
 import type * as rooms from "../rooms.js";
 import type * as users from "../users.js";
@@ -21,6 +22,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   messages: typeof messages;
+  passwordActions: typeof passwordActions;
   presence: typeof presence;
   rooms: typeof rooms;
   users: typeof users;
