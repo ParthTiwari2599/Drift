@@ -43,7 +43,7 @@ export const createOrJoinRoom = mutation({
 });
 
 export const findPrivateRoom = query({
-  args: { roomName: v.string(), password: v.string() },
+  args: { roomName: v.string() },
   handler: async (ctx, args) => {
     const slug = slugify(args.roomName);
     const room = await ctx.db
@@ -52,11 +52,7 @@ export const findPrivateRoom = query({
       .first();
 
     if (!room || !room.isLocked) throw new Error("ROOM_NOT_FOUND");
-    const ok = await ctx.runAction(internal.passwordActions.comparePassword, {
-      password: args.password,
-      hash: room.passwordHash || "",
-    });
-    if (!ok) throw new Error("INVALID_PASSWORD");
+    // Password check must be done on client or via Convex action, not here
     return { id: room._id, ...room };
   },
 });
