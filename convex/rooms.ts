@@ -8,7 +8,7 @@ const slugify = (topic: string) =>
 export const createOrJoinRoom = mutation({
   args: {
     topic: v.string(),
-    password: v.optional(v.string()),
+    passwordHash: v.optional(v.string()), // Accept hash, not password
     userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -20,29 +20,19 @@ export const createOrJoinRoom = mutation({
 
     if (existing) {
       if (existing.isLocked) {
-        if (!args.password) throw new Error("PASSWORD_REQUIRED");
-        const ok = await ctx.runAction(internal.passwordActions.comparePassword, {
-          password: args.password,
-          hash: existing.passwordHash || "",
-        });
-        if (!ok) throw new Error("INVALID_PASSWORD");
+        if (!args.passwordHash) throw new Error("PASSWORD_REQUIRED");
+        // Compare hashes directly (client must check password before calling)
+        if (args.passwordHash !== existing.passwordHash) throw new Error("INVALID_PASSWORD");
       }
       return { id: existing._id, ...existing };
-    }
-
-    let passwordHash: string | undefined = undefined;
-    if (args.password) {
-      passwordHash = await ctx.runAction(internal.passwordActions.hashPassword, {
-        password: args.password,
-      });
     }
 
     const roomData = {
       topic: args.topic,
       slug,
       active: true,
-      isLocked: !!args.password,
-      passwordHash,
+      isLocked: !!args.passwordHash,
+      passwordHash: args.passwordHash,
       createdBy: args.userId || "",
       createdAt: Date.now(),
     };
