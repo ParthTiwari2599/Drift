@@ -64,6 +64,8 @@ export default function Home() {
     api.users.getUser,
     user ? { userId: user.uid } : "skip"
   );
+  const hashPassword = useMutation(api.passwordActions.hashPassword);
+  const comparePassword = useMutation(api.passwordActions.comparePassword);
 
   // Modal state for password input / generic prompts
   const [modal, setModal] = useState<{
@@ -143,97 +145,32 @@ export default function Home() {
 
   const activeRooms: Room[] = roomsWithCounts as Room[];
 
-  const createRoom = async () => {
+  const handleCreateRoom = async () => {
     if (!user || !roomName.trim()) return;
 
-    try {
-      // Validate password if protection is enabled
-      if (isPasswordProtected) {
-        if (!roomPassword.trim()) {
-          setModal({
-            open: true,
-            message: "Please enter a password for the protected room",
-            input: false,
-            onSubmit: () => setModal((prev) => ({ ...prev, open: false })),
-          });
-          return;
-        }
-        if (roomPassword !== confirmPassword) {
-          setModal({
-            open: true,
-            message: "Passwords do not match",
-            input: false,
-            onSubmit: () => setModal((prev) => ({ ...prev, open: false })),
-          });
-          return;
-        }
-        if (roomPassword.length < 4) {
-          setModal({
-            open: true,
-            message: "Password must be at least 4 characters",
-            input: false,
-            onSubmit: () => setModal((prev) => ({ ...prev, open: false })),
-          });
-          return;
-        }
-      }
-
-      const room = await createOrJoinRoom({
-        topic: roomName.trim(),
-        password: isPasswordProtected ? roomPassword : undefined,
-        userId: user.uid,
-      });
-      router.push(`/room/${room.id}`);
-    } catch (error) {
-      setModal({
-        open: true,
-        message: "Failed to create room: " + (error as Error).message,
-        input: false,
-        onSubmit: () => setModal((prev) => ({ ...prev, open: false })),
-      });
+    let passwordHash: string | undefined = undefined;
+    if (isPasswordProtected && roomPassword) {
+      passwordHash = await hashPassword({ password: roomPassword });
     }
+
+    const room = await createOrJoinRoom({
+      topic: roomName.trim(),
+      passwordHash,
+      userId: user.uid,
+    });
+    router.push(`/room/${room.id}`);
   };
 
-  const joinRoom = async (room: Room) => {
-    if (!user) {
-      setModal({
-        open: true,
-        message: "Please login first to join rooms",
-        input: false,
-        onSubmit: () => setModal((prev) => ({ ...prev, open: false })),
-      });
-      return;
-    }
-    setIsMobileMenuOpen(false);
-
-    if (room.isLocked) {
-      setModal({
-        open: true,
-        message: "This room is password protected. Enter password:",
-        input: true,
-        onSubmit: async (password) => {
-          if (!password) return;
-          try {
-            await createOrJoinRoom({
-              topic: room.topic,
-              password,
-              userId: user.uid,
-            });
-            setModal((prev) => ({ ...prev, open: false }));
-            router.push(`/room/${room.id}`);
-          } catch (error) {
-            setModal({
-              open: true,
-              message: "Invalid password",
-              input: false,
-              onSubmit: () => setModal((prev) => ({ ...prev, open: false })),
-            });
-          }
-        },
-      });
-    } else {
-      router.push(`/room/${room.id}`);
-    }
+  const handleJoinRoom = async (room: Room, password: string) => {
+    if (!room.passwordHash) throw new Error("Room has no password hash");
+    const ok = await comparePassword({ password, hash: room.passwordHash });
+    if (!ok) throw new Error("INVALID_PASSWORD");
+    await createOrJoinRoom({
+      topic: room.topic,
+      passwordHash: room.passwordHash,
+      userId: user.uid,
+    });
+    router.push(`/room/${room.id}`);
   };
 
   const findAndOpenRoom = () => {
@@ -687,7 +624,7 @@ export default function Home() {
                     )}
 
                     <button
-                      onClick={createRoom}
+                      onClick={handleCreateRoom}
                       className="w-full bg-stone-900 text-white py-4 sm:py-5 rounded-2xl font-black uppercase tracking-widest text-xs sm:text-sm hover:bg-emerald-600 transition-all shadow-lg"
                     >
                       Establish Connection
