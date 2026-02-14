@@ -596,7 +596,7 @@ Your messages disappear after 2 hours for privacy. 💫`;
                         return (
                             <div key={msg.id || i} className="flex justify-center animate-in fade-in slide-in-from-bottom-2 duration-300">
                                 <div className="max-w-[80%] bg-zinc-800/50 border border-zinc-700/50 rounded-2xl p-4 text-center">
-                                    <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+                                    <div className="text-sm text-white leading-relaxed whitespace-pre-line">
                                         {msg.text}
                                     </div>
                                 </div>
@@ -615,7 +615,7 @@ Your messages disappear after 2 hours for privacy. 💫`;
                                 <div className={`px-6 py-3.5 rounded-3xl text-[14px] font-medium leading-relaxed transition-all shadow-sm ${
                                     isMe 
                                     ? 'bg-blue-600 text-white rounded-tr-none hover:shadow-[0_10px_30px_rgba(59,130,246,0.2)]' 
-                                    : 'bg-zinc-900 text-zinc-200 rounded-tl-none border border-zinc-800/50 hover:bg-zinc-800/80'
+                                    : 'bg-zinc-900 text-white rounded-tl-none border border-zinc-800/50 hover:bg-zinc-800/80'
                                 }`}>
                                     {msg.type === "voice" ? (
                                         <audio controls className="max-w-full h-8">
@@ -623,7 +623,7 @@ Your messages disappear after 2 hours for privacy. 💫`;
                                             Your browser does not support audio playback.
                                         </audio>
                                     ) : (
-                                        <p>{msg.text}</p>
+                                        <p className="text-white">{msg.text}</p>
                                     )}
                                 </div>
                                 <div className={`mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-40 transition-opacity ${isMe ? 'justify-end' : 'justify-start'}`}>

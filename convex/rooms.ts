@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import bcrypt from "bcryptjs";
+import { internal } from "convex/_generated/api";
 
 const slugify = (topic: string) =>
   topic.trim().replace(/\s+/g, "-").toLowerCase();
@@ -21,7 +21,10 @@ export const createOrJoinRoom = mutation({
     if (existing) {
       if (existing.isLocked) {
         if (!args.password) throw new Error("PASSWORD_REQUIRED");
-        const ok = await bcrypt.compare(args.password, existing.passwordHash || "");
+        const ok = await ctx.runAction(internal.passwordActions.comparePassword, {
+          password: args.password,
+          hash: existing.passwordHash || "",
+        });
         if (!ok) throw new Error("INVALID_PASSWORD");
       }
       return { id: existing._id, ...existing };
@@ -29,7 +32,9 @@ export const createOrJoinRoom = mutation({
 
     let passwordHash: string | undefined = undefined;
     if (args.password) {
-      passwordHash = await bcrypt.hash(args.password, 10);
+      passwordHash = await ctx.runAction(internal.passwordActions.hashPassword, {
+        password: args.password,
+      });
     }
 
     const roomData = {
@@ -57,7 +62,10 @@ export const findPrivateRoom = query({
       .first();
 
     if (!room || !room.isLocked) throw new Error("ROOM_NOT_FOUND");
-    const ok = await bcrypt.compare(args.password, room.passwordHash || "");
+    const ok = await ctx.runAction(internal.passwordActions.comparePassword, {
+      password: args.password,
+      hash: room.passwordHash || "",
+    });
     if (!ok) throw new Error("INVALID_PASSWORD");
     return { id: room._id, ...room };
   },
