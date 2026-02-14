@@ -165,6 +165,7 @@ export default function Home() {
     if (!room.passwordHash) throw new Error("Room has no password hash");
     const ok = await comparePassword({ password, hash: room.passwordHash });
     if (!ok) throw new Error("INVALID_PASSWORD");
+    if (!user) throw new Error("User not logged in");
     await createOrJoinRoom({
       topic: room.topic,
       passwordHash: room.passwordHash,
