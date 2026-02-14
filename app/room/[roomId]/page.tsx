@@ -839,7 +839,7 @@ export default function RoomPage() {
                                 <h3 className="text-[10px] text-stone-600 font-black uppercase tracking-[0.3em] mb-4 px-3 flex items-center gap-2">
                                     <Zap size={14} className="text-stone-500" /> Proximity
                                 </h3>
-                                {activeUsers.map((u) => {
+                                {activeUsers.map((u: any) => {
                                     const alreadyConnected = privateRooms.find(
                                         (r) => r.userA === u.userId || r.userB === u.userId
                                     );
