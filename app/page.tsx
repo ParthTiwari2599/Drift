@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { AppModal } from "@/components/AppModal";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useAction } from "convex/react";
 import { api } from "convex/_generated/api";
 import {
   Hash,
@@ -64,8 +64,8 @@ export default function Home() {
     api.users.getUser,
     user ? { userId: user.uid } : "skip"
   );
-  const hashPassword = useMutation(api.passwordActions.hashPassword);
-  const comparePassword = useMutation(api.passwordActions.comparePassword);
+  const hashPassword = useAction(api.passwordActions.hashPassword);
+  const comparePassword = useAction(api.passwordActions.comparePassword);
 
   // Modal state for password input / generic prompts
   const [modal, setModal] = useState<{
