@@ -1188,12 +1188,12 @@ export default function RoomPage() {
                                                             : "bg-gray-200/50 border-gray-400"
                                                             } ml-2`}
                                                     >
-                                                        <div className="text-[10px] sm:text-xs text-stone-500 mb-1">
+                                                        <div className="text-[10px] sm:text-xs text-black mb-1">
                                                             Replying to{" "}
                                                             {userNames[msg.replyTo.userId] ||
                                                                 `User ${msg.replyTo.userId?.slice(-4)}`}
                                                         </div>
-                                                        <div className="text-xs sm:text-sm text-stone-500 truncate">
+                                                        <div className="text-xs sm:text-sm text-black truncate">
                                                             {msg.replyTo.text}
                                                         </div>
                                                     </div>
