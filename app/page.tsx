@@ -143,6 +143,32 @@ export default function Home() {
     )}&background=${colors[colorIndex].replace("#", "")}&color=fff&size=128`;
   };
 
+  // Helper to join a room, prompting for password if needed
+  const joinRoom = (room: Room) => {
+    if (room.isLocked) {
+      setModal({
+        open: true,
+        message: `Enter password for room: ${room.topic}`,
+        input: true,
+        onSubmit: async (password: string) => {
+          setModal((prev) => ({ ...prev, open: false }));
+          try {
+            await handleJoinRoom(room, password);
+          } catch (err: any) {
+            setModal({
+              open: true,
+              message: err?.message === 'INVALID_PASSWORD' ? 'Incorrect password. Try again.' : 'Failed to join room.',
+              input: true,
+              onSubmit: (pw: string) => joinRoom(room),
+            });
+          }
+        },
+      });
+    } else {
+      handleJoinRoom(room, "");
+    }
+  };
+
   const activeRooms: Room[] = roomsWithCounts as Room[];
 
   const handleCreateRoom = async () => {
