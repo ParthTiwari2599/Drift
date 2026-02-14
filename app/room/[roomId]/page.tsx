@@ -1115,7 +1115,7 @@ export default function RoomPage() {
                         >
                             {displayedMessages
                                 .filter(
-                                    (msg) =>
+                                    (msg: any) =>
                                         !searchTerm ||
                                         msg.text?.toLowerCase().includes(searchTerm.toLowerCase())
                                 )
