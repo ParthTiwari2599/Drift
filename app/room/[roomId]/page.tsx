@@ -1119,7 +1119,7 @@ export default function RoomPage() {
                                         !searchTerm ||
                                         msg.text?.toLowerCase().includes(searchTerm.toLowerCase())
                                 )
-                                .map((msg, i) => {
+                                .map((msg: any, i) => {
                                     const isMe = msg.userId === user.uid;
                                     const isSystem = msg.userId === "system";
                                     const senderName =
